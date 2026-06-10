@@ -44,37 +44,13 @@ docs/
 
 ## Unified DSL Pipeline 服务说明
 
-> **推荐使用 `/pipeline` 接口**（端口 3104），优势：
+> **推荐使用 `/pipeline` 接口**（端口 3204），优势：
 > - ✅ **减少 HTTP 请求**：从 3 次（enrich + schema-to-design-dsl + convert）减少到 1 次（pipeline）
 > - ✅ **流程简化**：补全 + 转 DSL + 导出 hex 一次性完成
 > - ✅ **产物精简**：不再需要保留中间产物（schema-final.json、design-dsl.json）
-> - ✅ **服务端自动存储产物**：每次请求的产物自动保存，可通过 `request_id` 查看/下载历史产物
+> - ✅ **服务端自动存储产物**：每次请求的产物自动保存至服务端 `artifacts/` 目录，可通过 `artifact_id` 标识
 
-**服务端产物存储位置：**
-```
-/Users/ucd/Desktop/未命名文件夹/output-artifacts/{request_id}/
-├── manifest.json           元数据清单
-├── input-node.json         原始输入的 node-dsl
-├── icon-result.json        icon-agent 补全结果
-├── component-result.json   component-service 补全结果
-├── final-node.json         补全后的最终 node-dsl
-├── design-dsl.json         转换后的 design-dsl
-├── output.hex              最终的 hex 文件
-└── output.zip              zip 包（包含 hex + placeholder）
-```
-
-**查看历史产物：**
-```bash
-# 查看所有产物列表
-curl http://localhost:3104/artifacts
-
-# 查看指定请求的产物详情
-curl http://localhost:3104/artifacts/{request_id}
-
-# 下载产物文件
-curl http://localhost:3104/artifacts/{request_id}/output.hex > output.hex
-curl http://localhost:3104/artifacts/{request_id}/design-dsl.json > design-dsl.json
-```
+**响应说明：** `/pipeline` 接口返回 `artifact_id` + `zip`（base64），hex 文件包含在 zip 包内（`output.hex`），不再作为独立字段返回。
 
 详见：[unified-dsl-pipeline-API.md](docs/api/unified-dsl-pipeline-API.md)
 
@@ -107,7 +83,7 @@ SCRIPTS = SKILL_DIR/scripts
 | `prune-nodes.js` | 节点剪枝 + 样式精简 | ⚠️ **Node.js 脚本**，必须通过 `node SCRIPTS/prune-nodes.js` 在 Bash 中执行，不能用 evaluate_script |
 | `gen-wireframe.js` | 语义线框 HTML 生成 | ⚠️ **Node.js CLI 脚本**，必须通过 `node SCRIPTS/gen-wireframe.js` 在 Bash 中执行，不能用 evaluate_script |
 | `schema-to-design-dsl.js` | node-dsl → design-dsl（旧流程，已被 `/pipeline` 接口替代） | **Node.js 脚本**，`node SCRIPTS/schema-to-design-dsl.js`（仅在需要单独转换时使用） |
-| `call-unified-pipeline.js` | 调用 Unified DSL Pipeline API（端口 3104）：<br>• **pipeline**（推荐）：补全 + 转 DSL + 导出，一次请求<br>• enrich：仅补全节点信息<br>• convert：仅转 DSL → hex | **Node.js 脚本**，推荐：<br>`node SCRIPTS/call-unified-pipeline.js pipeline <input.json> <output-dir>` |
+| `call-unified-pipeline.js` | 调用 Unified DSL Pipeline API（端口 3204）：<br>• **pipeline**（推荐）：补全 + 转 DSL + 导出，一次请求<br>• enrich：仅补全节点信息<br>• convert：仅转 DSL → hex | **Node.js 脚本**，推荐：<br>`node SCRIPTS/call-unified-pipeline.js pipeline <input.json> <output-dir>` |
 | `launch-pixso.js` | 启动/连接 Chrome 并打开 Pixso 设计页 | **Node.js 脚本**，`node SCRIPTS/launch-pixso.js [--login]`，需在后台常驻 |
 | `import-to-pixso.js` | 将 hex 粘贴到 Pixso 画布 | **Node.js 脚本**，`node SCRIPTS/import-to-pixso.js <hex-file>` |
 

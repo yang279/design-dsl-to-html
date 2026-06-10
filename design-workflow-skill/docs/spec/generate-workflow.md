@@ -147,7 +147,7 @@
 
 | 服务 | 端口 | 接口 | 输入 | 输出 |
 |---|---|---|---|---|
-| Unified DSL Pipeline | 3104 | `POST /pipeline` | node-dsl JSON 文件 | hex + zip（补全 + 转 DSL + 导出一次性完成） |
+| Unified DSL Pipeline | 3204 | `POST /pipeline` | node-dsl JSON 文件 | zip（补全 + 转 DSL + 导出一次性完成，hex 在 zip 内） |
 
 **调用步骤：**
 
@@ -156,18 +156,19 @@
 ```bash
 # 调用 Unified DSL Pipeline 的 pipeline 接口
 # 上传 node-dsl JSON，一次性完成：补全 + 转 design-dsl + 导出 hex
-curl -s -X POST http://localhost:3104/pipeline \
+curl -s -X POST http://localhost:3204/pipeline \
   -F "file=@<slug>-output/<slug>-node.json" \
   -F "page_name=<slug>" \
   -F "skip_enrich=false" \
   -o "<slug>-output/pipeline-result.json"
 
-# 解析响应，提取 hex 和 zip
+# 解析响应，提取 zip（hex 在 zip 内的 output.hex）
 node -e "
 const r = JSON.parse(require('fs').readFileSync('<slug>-output/pipeline-result.json'));
 if (r.success) {
-  require('fs').writeFileSync('<slug>-output/<slug>-output.hex', r.hex, 'utf8');
-  require('fs').writeFileSync('<slug>-output/<slug>-output.b64', r.zip, 'utf8');
+  const zipBuffer = Buffer.from(r.zip, 'base64');
+  require('fs').writeFileSync('<slug>-output/<slug>-output.zip', zipBuffer);
+  console.log('artifact_id:', r.artifact_id);
   console.log('补全图标:', r.stats.enrich.icons);
   console.log('补全组件:', r.stats.enrich.components);
   console.log('总图层数:', r.stats.layers.total);
@@ -180,11 +181,10 @@ if (r.success) {
 }
 "
 
-# base64 解码为 zip（含 output.hex 及 svg/png 资源，但 hex 已在上一步提取）
-base64 -d "<slug>-output/<slug>-output.b64" > "<slug>-output/<slug>-output.zip"
-rm "<slug>-output/<slug>-output.b64"
+# 从 zip 中提取 hex 文件
+unzip -p "<slug>-output/<slug>-output.zip" output.hex > "<slug>-output/<slug>-output.hex"
 
-# 解压 zip（验证内容，optional）
+# 查看 zip 内容（optional）
 unzip -l "<slug>-output/<slug>-output.zip"
 ```
 
@@ -193,22 +193,21 @@ unzip -l "<slug>-output/<slug>-output.zip"
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `success` | boolean | 是否成功 |
-| `request_id` | string | 请求唯一标识 |
+| `artifact_id` | string | 本次产物唯一标识，产物同时存储于服务端 `artifacts/` 目录 |
 | `stats.enrich.icons` | number | 补全的图标数 |
 | `stats.enrich.components` | number | 补全的组件数 |
 | `stats.layers.total` | number | 总图层数 |
 | `stats.layers.frames/texts/instances/placeholders` | number | 各类型图层统计 |
 | `stats.missing_keys` | number | 缺失的组件数量 |
-| `hex` | string | Pixso hex 文件内容（文本格式） |
-| `zip` | string | zip 包（base64 编码） |
+| `zip` | string | zip 包（base64 编码），解压后含 `output.hex` 及 svg/png 资源 |
 | `missing_keys` | array | 缺失组件的 key 列表 |
 
 **产物说明：**
 
 | 文件 | 说明 |
 |---|---|
-| `<slug>-output.hex` | 最终产物，可直接导入 Pixso |
-| `<slug>-output.zip` | zip 包（含 hex + placeholder 资源） |
+| `<slug>-output.hex` | 最终产物，可直接导入 Pixso（从 zip 中提取） |
+| `<slug>-output.zip` | zip 包（含 output.hex + placeholder 资源） |
 | `{guid}.svg` | icon placeholder 的 SVG 内容（zip 内） |
 | `{guid}.png` | image placeholder 的图片内容（zip 内） |
 
