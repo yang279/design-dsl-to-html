@@ -1,4 +1,4 @@
-# 分析流程（Step 1–4）
+# 分析流程（Step 1–3）
 
 > 适用：用户提供一个 HTML 项目目录路径，需要提取语义结构并输出设计 DSL。  
 > **需要 Chrome DevTools MCP**（Step 1）。
@@ -9,8 +9,7 @@
 |------|--------|----------|
 | Step 1 — 渲染 + 节点提取 | **Chrome DevTools MCP + 纯脚本** | 浏览器渲染、截图、DOM 遍历提取节点树，全程无 LLM |
 | Step 2 — 语义标注 | **纯脚本**（剪枝/精简/线框）<br>**LLM**（语义标注） | 脚本做预处理和后处理；LLM 只负责给每个节点打 semantic/label/confidence |
-| Step 3 — 补全节点信息 | **脚本** | 并行调用 iconAgent `/resolve` 和 Component Match `/match-dsl`，合并为最终 schema |
-| Step 4 — 生成 Hex 文件 | **纯脚本** | `schema-to-design-dsl.js` 转格式，调用 dsl2hex `/convert`，产出 hex + 资源 zip |
+| Step 3 — 完整流程 | **脚本** | 调用 `/pipeline` 接口，一次性完成补全 + 转 DSL + 导出 hex（仅需一次 HTTP 请求） |
 
 ## 产物目录结构
 
@@ -18,8 +17,7 @@
 <PROJECT_DIR>-output/
 ├── step1/  screenshots/ + nodes-*.json + styles-*.json + manifest.json + run.json
 ├── step2/  nodes-*.json + styles-*.json + schema-*.json + wireframe-*.html + manifest.json + run.json
-├── step3/  schema-final-*.json
-└── step4/  design-dsl-*.json（保留）+ output-*.zip（含 output.hex 及 svg/png 资源）
+└── step3/  pipeline-result-*.json + output-*.hex + output-*.zip
 ```
 
 ---
@@ -47,7 +45,7 @@ mkdir -p "<PROJECT_DIR>-output/step1/screenshots"
    若 `allLoaded` 为 `false`，等待 500ms 后最多重试 10 次；超时则继续，不中断流程
 5. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 读取 `SCRIPTS/page-utils.js`，调用 `extractNodes()`  
    *(页面内执行的纯脚本：DOM 未经任何修改，直接遍历采集节点树 + computedStyle，坐标与页面真实渲染一致，无 LLM 参与)*  
-   
+    
    结果**以任意方式**写入以下两个产物文件（临时文件中转或直接写出均可），**格式要求不得违反**：
    - `step1/nodes-<filename>.json`：写 `extractNodes()` 返回值的 `tree` 字段，直接存储
    - `step1/styles-<filename>.json`：**必须包含 `styles` 包装层**，格式为 `{ "styles": { nid: computedStyle } }`  
@@ -131,17 +129,16 @@ mkdir -p "<PROJECT_DIR>-output/step2"
 
 ---
 
-## Step 3 — 补全节点信息
+## Step 3 — 完整流程（补全 + 生成 Hex）
 
 > **执行者：脚本**  
-> 以 Step 2 生成的 `schema-<filename>.json` 为输入，**并行**调用 [iconAgent](../api/icon-api.md) 和 [Component Match API](../api/component-api.md) 两个服务，分别注入 `iconSvg` 和 `component` 字段，合并为最终 schema，写入 `step3/schema-final-<filename>.json`。
+> 以 Step 2 生成的 `schema-<filename>.json` 为输入，调用 Unified DSL Pipeline API 的 `/pipeline` 接口（端口 3104），**一次性完成**补全节点信息（iconSvg + component）+ 转 design-dsl + 导出 hex，仅需一次 HTTP 请求。
 
-**两个服务的职责：**
+**服务信息：**
 
-| 服务 | 端口 | 接口 | 输入 | 处理节点 | 注入字段 |
-|---|---|---|---|---|---|
-| iconAgent | 3103 | `POST /resolve` | 文件上传（整棵树） | `semantic=icon` | `iconSvg` |
-| Component Match | 3102 | `POST /match-dsl` | 文件上传（整棵树） | `button/input/navbar/tabbar/switch/badge/avatar` | `component` |
+| 服务 | 端口 | 接口 | 输入 | 输出 |
+|---|---|---|---|---|
+| Unified DSL Pipeline | 3104 | `POST /pipeline` | node-dsl JSON 文件 | hex + zip（补全 + 转 DSL + 导出一次性完成） |
 
 **创建产物目录：**
 ```bash
@@ -150,126 +147,74 @@ mkdir -p "<PROJECT_DIR>-output/step3"
 
 **对每个页面依次执行：**
 
-**① 并行上传同一份文件到两个服务**
+**① 调用 `/pipeline` 接口（完整流程）**
 
 ```bash
-# iconAgent：递归找所有 icon 节点，返回注入 iconSvg 后的完整树
-# 原始响应存入 step3/raw-icons-<filename>.json 供调试；提取 .content 存入临时文件
-curl -s -X POST http://localhost:3103/resolve \
+# 调用 Unified DSL Pipeline 的 pipeline 接口
+# 上传 node-dsl JSON，一次性完成：补全 + 转 design-dsl + 导出 hex
+curl -s -X POST http://localhost:3104/pipeline \
   -F "file=@<PROJECT_DIR>-output/step2/schema-<filename>.json" \
-  -o "<PROJECT_DIR>-output/step3/raw-icons-<filename>.json" && \
-  node -e "const r=JSON.parse(require('fs').readFileSync('<PROJECT_DIR>-output/step3/raw-icons-<filename>.json')); process.stdout.write(JSON.stringify(r.content,null,2))" \
-  > /tmp/icons-<filename>.json &
+  -F "page_name=<filename>" \
+  -F "skip_enrich=false" \
+  -o "<PROJECT_DIR>-output/step3/pipeline-result-<filename>.json"
 
-# Component Match：递归找所有可匹配节点，返回 [{nid, semantic, label, match}] 数组
-# 原始响应同时存入 step3/raw-components-<filename>.json 供调试
-curl -s -X POST http://localhost:3102/match-dsl \
-  -F "file=@<PROJECT_DIR>-output/step2/schema-<filename>.json" \
-  -o "<PROJECT_DIR>-output/step3/raw-components-<filename>.json" && \
-  cp "<PROJECT_DIR>-output/step3/raw-components-<filename>.json" /tmp/components-<filename>.json &
+# 解析响应，提取 hex 和 zip
+node -e "
+const r = JSON.parse(require('fs').readFileSync('<PROJECT_DIR>-output/step3/pipeline-result-<filename>.json'));
+if (r.success) {
+  require('fs').writeFileSync('<PROJECT_DIR>-output/step3/output-<filename>.hex', r.hex, 'utf8');
+  require('fs').writeFileSync('<PROJECT_DIR>-output/step3/output-<filename>.b64', r.zip, 'utf8');
+  console.log('补全图标:', r.stats.enrich.icons);
+  console.log('补全组件:', r.stats.enrich.components);
+  console.log('总图层数:', r.stats.layers.total);
+  if (r.missing_keys && r.missing_keys.length > 0) {
+    console.error('缺失组件:', r.missing_keys.join(', '));
+  }
+} else {
+  console.error('pipeline 失败:', r.error);
+  process.exit(1);
+}
+"
 
-wait
+# base64 解码为 zip（含 output.hex 及 svg/png 资源，但 hex 已在上一步提取）
+base64 -d "<PROJECT_DIR>-output/step3/output-<filename>.b64" > "<PROJECT_DIR>-output/step3/output-<filename>.zip"
+rm "<PROJECT_DIR>-output/step3/output-<filename>.b64"
+
+# 解压 zip（验证内容，optional）
+unzip -l "<PROJECT_DIR>-output/step3/output-<filename>.zip"
 ```
 
-> **调试说明：** `step3/raw-icons-<filename>.json` 保存 iconAgent 的完整原始响应（含 `errorCode`/`success` 字段），`step3/raw-components-<filename>.json` 保存 Component Match 的完整原始响应。两个文件在流程失败时可直接检查以定位问题。
+**响应字段说明：**
 
-**② 合并为最终 JSON**
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `success` | boolean | 是否成功 |
+| `request_id` | string | 请求唯一标识（可在服务端查看产物） |
+| `artifacts_dir` | string | 服务端产物存储路径 |
+| `stats.enrich.icons` | number | 补全的图标数 |
+| `stats.enrich.components` | number | 补全的组件数 |
+| `stats.layers.total` | number | 总图层数 |
+| `stats.layers.frames/texts/instances/placeholders` | number | 各类型图层统计 |
+| `stats.missing_keys` | number | 缺失的组件数量 |
+| `hex` | string | Pixso hex 文件内容（文本格式） |
+| `zip` | string | zip 包（base64 编码） |
+| `missing_keys` | array | 缺失组件的 key 列表 |
 
-- 以 iconAgent 响应（`/tmp/icons-<filename>.json`，即 `raw-icons` 中的 `content` 字段）为基础树（已含 `iconSvg`）
-- 遍历 Component Match 响应数组，对每个 `{ nid, match }` 项：按 nid 找到基础树中对应节点，若 `match` 非 `null` 则注入 `component: match`
-- 递归处理所有 `children`，写出 `<PROJECT_DIR>-output/step3/schema-final-<filename>.json`
-
-**最终节点示例：**
-
-```json
-{ "nid": 3, "semantic": "icon", "label": "返回图标 24×24 细线",
-  "iconSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" ...>...</svg>", "...": "..." }
-
-{ "nid": 17, "semantic": "button", "label": "登录按钮（主操作，蓝色）",
-  "component": {
-    "sourceLabel": "ICT UI 组件库", "componentSetName": "1.按钮",
-    "componentKey": "4280:103404", "hexFile": "component/4280_103404.txt",
-    "variant": { "variantKey": "4280:102987", "name": "status=primary, size=large, disabled=false" },
-    "reason": "status=primary 对应主按钮，size=large 对应大号"
-  }, "...": "..." }
-```
-
-**处理规则：**
-
-- 两个服务均接收同一份原始 `step2/schema-<filename>.json`，无需预处理
-- Component Match 响应中 `match=null` 的节点不注入 `component` 字段
-- 未被任一服务处理的节点内容与 Step 2 原文件一致
-
-**降级规则：**
-
-- iconAgent 请求失败 → 跳过 `iconSvg` 注入，以 Step 2 原始 schema 继续执行 Component Match 合并
-- Component Match 请求失败 → 跳过 `component` 注入，以 iconAgent 响应（或原始 schema）作为最终产物
-- 两个服务均失败 → 直接将 `step2/schema-<filename>.json` 复制为 `step3/schema-final-<filename>.json`，不报错退出
-- 无论成功与否，`raw-icons-<filename>.json` 和 `raw-components-<filename>.json` 均应写出（即便为空或错误响应），以便调试
-
-**Step 3 验收：** 每个页面均有 `step3/schema-final-*.json`（至少为 Step 2 原始结构）。
-
----
-
-## Step 4 — 生成 Hex 文件
-
-> **执行者：纯脚本**  
-> [dsl2hex 服务](../api/dsl2hex-api.md)（端口 3101）接收 design-dsl 格式，而 Step 3 产出的是 node-dsl 格式。Step 4 分两阶段：先由脚本将 `schema-final-<filename>.json` 转换为 design-dsl（保留），再调用 `POST /convert` 获得 hex zip 包。
-
-**创建产物目录：**
-```bash
-mkdir -p "<PROJECT_DIR>-output/step4"
-```
-
-**对每个页面依次执行：**
-
-**① 脚本将 node-dsl 转换为 design-dsl（保留产物）**
-
-```bash
-node SCRIPTS/schema-to-design-dsl.js \
-  "<PROJECT_DIR>-output/step3/schema-final-<filename>.json" \
-  --page-name "<filename>" \
-  --out "<PROJECT_DIR>-output/step4/design-dsl-<filename>.json"
-```
-
-脚本转换规则（见 [design-dsl.md](design-dsl.md)）：
-
-| node-dsl 字段 | design-dsl 对应 |
-|---|---|
-| `nid` / `rect` | `id: "1:{nid}"` / `box`（相对父节点坐标） |
-| `style` | 拆解为 `fills` / `strokes` / `effects` / `corner_radius` / `auto_layout` |
-| `semantic ∈ {button,input,navbar,tabbar,switch,badge,avatar}` + `component` | `type: "instance"`，写入 `symbol_id`（取 `variant.guid`）/ `variant_key`（取 `variant.variantKey`）/ `component_set_key`（取 `componentKey`）/ `path`（取 `component.path`，由 component-service 拼好返回，原样写入） |
-| `semantic=icon` + `iconSvg` | `type: "frame"` + `placeholder`（将 `iconSvg` 原样写入 `note` 字段） |
-| `semantic ∈ {text,heading}` + `text`（无子节点） | `type: "text"` + `text_style` |
-| 其余节点 | `type: "frame"`，递归处理 `children` |
-
-**② 调用 dsl2hex 生成 zip**
-
-```bash
-curl -s -X POST http://localhost:3101/convert \
-  -H "Content-Type: application/json" \
-  -d "{\"dsl\": $(cat <PROJECT_DIR>-output/step4/design-dsl-<filename>.json)}" \
-  | node -e "const c=[]; process.stdin.on('data',d=>c.push(d)); process.stdin.on('end',()=>{ const r=JSON.parse(Buffer.concat(c)); if(r.zip){ require('fs').writeFileSync('out.b64', r.zip); if(r.missing_keys) console.error('missing_keys:', r.missing_keys); } else { console.error(r.error); process.exit(1); } })"
-
-# base64 解码为 zip
-base64 -d out.b64 > "<PROJECT_DIR>-output/step4/output-<filename>.zip"
-rm out.b64
-
-# 解压（含 output.hex 及 svg/png 资源）
-unzip -o "<PROJECT_DIR>-output/step4/output-<filename>.zip" \
-  -d "<PROJECT_DIR>-output/step4/"
-```
-
-**zip 解压后的产物：**
+**产物说明：**
 
 | 文件 | 说明 |
 |---|---|
-| `output.hex` | 解压出来即为最终产物，原样保留，不做改名/复制等额外处理 |
-| `{guid}.svg` | icon placeholder 的 SVG 内容 |
-| `{guid}.png` | image placeholder 的图片内容 |
+| `output-<filename>.hex` | 最终产物，可直接导入 Pixso |
+| `output-<filename>.zip` | zip 包（含 hex + placeholder 资源） |
+| `{guid}.svg` | icon placeholder 的 SVG 内容（zip 内） |
+| `{guid}.png` | image placeholder 的图片内容（zip 内） |
+
+> **调试说明：** `pipeline-result-<filename>.json` 保存完整响应，包含所有统计信息和产物数据。
 
 **降级规则：**
-- `missing_keys` 非空 → 记录警告，zip 仍有效，对应 instance 节点在 Pixso 中缺失但不影响导入
-- 服务返回 500 → 保留 `step4/design-dsl-<filename>.json`，报错提示，不继续解压
 
-**Step 4 验收：** 每个页面均有 `output-<filename>.zip` + 解压后含 `output.hex`。
+- 接口请求失败 → 报错提示，不生成产物
+- `missing_keys` 非空 → 记录警告，hex/zip 仍有效，对应 instance 节点在 Pixso 中缺失但不影响导入
+- 补全失败（icons/components = 0）但接口返回成功 → hex/zip 仍生成，无补全数据
+
+**Step 3 验收：** 每个页面均有 `output-<filename>.hex`（可直接导入 Pixso）。
