@@ -238,7 +238,7 @@ node SCRIPTS/schema-to-design-dsl.js \
 |---|---|
 | `nid` / `rect` | `id: "1:{nid}"` / `box`（相对父节点坐标） |
 | `style` | 拆解为 `fills` / `strokes` / `effects` / `corner_radius` / `auto_layout` |
-| `semantic ∈ {button,input,navbar,tabbar,switch,badge,avatar}` + `component` | `type: "instance"`，写入 `component_set_key` / `variant_key` |
+| `semantic ∈ {button,input,navbar,tabbar,switch,badge,avatar}` + `component` | `type: "instance"`，写入 `symbol_id`（取 `variant.guid`）/ `variant_key`（取 `variant.variantKey`）/ `component_set_key`（取 `componentKey`）/ `path`（取 `component.path`，由 component-service 拼好返回，原样写入） |
 | `semantic=icon` + `iconSvg` | `type: "frame"` + `placeholder`（将 `iconSvg` 原样写入 `note` 字段） |
 | `semantic ∈ {text,heading}` + `text`（无子节点） | `type: "text"` + `text_style` |
 | 其余节点 | `type: "frame"`，递归处理 `children` |

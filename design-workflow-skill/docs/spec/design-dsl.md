@@ -96,6 +96,7 @@
 | `variant_key` | string | 是 | 变体的 `componentKey`（该 SYMBOL 的全局唯一 hash）|
 | `component_set_key` | string | 是 | 所属组件集的 `componentKey`；若该组件无父组件集，则与 `variant_key` 相同 |
 | `component_set_resolved` | boolean | 是 | 组件集是否可在已加载的库中被解析。`false` 表示 key 存在但库不可用 |
+| `path` | string | 是 | 组件集 hex 文件相对组件库根目录（`HEX_LIB_DIR`）的路径，格式 `"{source}/{hexFile}"`，如 `"h-design-chart/component/93_55829.txt"`。来自 component-service 匹配结果中的 `path` 字段，原样写入即可。`dsl-to-hex` 转换时直接拼接 `HEX_LIB_DIR + path` 读取本地 hex 文件，不再请求 component-service |
 | `variant_props` | object | 否 | 变体属性键值对，如 `{"状态": "Pressed", "尺寸": "Medium"}` |
 | `overrides` | InstanceOverride[] | 否 | 实例级属性覆写列表 |
 
@@ -254,6 +255,7 @@
                 "variant_key": "549fdf93a10fec402c93432a2e228e407ccc2954",
                 "component_set_key": "ecb8481025909ec9371c3b25104bb8b7c1079224",
                 "component_set_resolved": false,
+                "path": "h-design-chart/component/93_55829.txt",
                 "variant_props": { "尺寸": "40" },
                 "overrides": []
               }

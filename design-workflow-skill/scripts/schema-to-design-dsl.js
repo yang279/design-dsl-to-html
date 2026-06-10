@@ -191,6 +191,7 @@ function convertNode(node, parentRect) {
   // instance：有 component 字段的可匹配语义节点
   // 注意：componentKey / variant.variantKey 是组件库内的全局哈希，
   //       variant.guid 才是 "sessionID:localID" 格式的 SYMBOL GUID（即 symbol_id）
+  //       path 由 component-service 直接拼好返回（= source + '/' + hexFile），原样写入即可
   if (node.component && COMPONENT_SEMANTICS.has(node.semantic)) {
     const comp = node.component;
     return {
@@ -201,6 +202,7 @@ function convertNode(node, parentRect) {
         variant_key:            comp.variant?.variantKey || '',
         component_set_key:      comp.componentKey        || '',
         component_set_resolved: false,
+        path:                   comp.path                || '',
       },
     };
   }
