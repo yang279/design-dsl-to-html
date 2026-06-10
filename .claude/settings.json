@@ -80,7 +80,8 @@
       "Bash(node /Users/ucd/Desktop/html-analysis-skill/html-analysis-skill/scripts/verify_reconstruction.js /tmp/test-bad-nodes.json /tmp/test-bad-nodes.json --tol 2 --out /tmp/test-bad-result.json)",
       "Bash(node /tmp/build_step3.js /Users/ucd/Desktop/html-analysis-skill/html-output/step2/nodes-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step2/styles-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step3/analysis-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step3/nodes-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step3/styles-Index.json)",
       "Bash(node /Users/ucd/Desktop/html-analysis-skill/html-analysis-skill/scripts/verify_reconstruction.js /Users/ucd/Desktop/html-analysis-skill/html-output/step3/nodes-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step3/styles-Index.json --tol 2 --out /Users/ucd/Desktop/html-analysis-skill/html-output/step3/verify-Index.json)",
-      "Bash(node /Users/ucd/Desktop/html-analysis-skill/html-analysis-skill/scripts/gen-layout-view.js /Users/ucd/Desktop/html-analysis-skill/html-output/step3/nodes-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step1/screenshots/Index-before.png /Users/ucd/Desktop/html-analysis-skill/html-output/step3/layout-Index.html)"
+      "Bash(node /Users/ucd/Desktop/html-analysis-skill/html-analysis-skill/scripts/gen-layout-view.js /Users/ucd/Desktop/html-analysis-skill/html-output/step3/nodes-Index.json /Users/ucd/Desktop/html-analysis-skill/html-output/step1/screenshots/Index-before.png /Users/ucd/Desktop/html-analysis-skill/html-output/step3/layout-Index.html)",
+      "mcp__chrome-devtools__close_page"
     ],
     "additionalDirectories": [
       "/Users/ucd/.cache/chrome-devtools-mcp/chrome-profile",

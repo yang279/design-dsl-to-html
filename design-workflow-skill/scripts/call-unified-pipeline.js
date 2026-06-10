@@ -18,8 +18,8 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-const PIPELINE_PORT = 3104;
-const PIPELINE_HOST = 'localhost';
+const PIPELINE_PORT = 3204;
+const PIPELINE_HOST = '7.192.166.139';
 
 function parseArgs(argv) {
   const args = {
@@ -221,29 +221,31 @@ async function callPipeline(args) {
     process.exit(1);
   }
   
-  const requestId = result.body.request_id;
-  const artifactsDir = path.join(args.outputDir, requestId);
+  const artifactId = result.body.artifact_id;
+  const artifactsDir = path.join(args.outputDir, artifactId);
   fs.mkdirSync(artifactsDir, { recursive: true });
-  
-  const hexPath = path.join(artifactsDir, 'output.hex');
-  fs.writeFileSync(hexPath, result.body.hex, 'utf8');
-  
+
   const zipBuffer = Buffer.from(result.body.zip, 'base64');
   const zipPath = path.join(artifactsDir, 'output.zip');
   fs.writeFileSync(zipPath, zipBuffer);
-  
+
+  // hex 在 zip 内的 output.hex，用 unzip 提取
+  const { execSync } = require('child_process');
+  const hexPath = path.join(artifactsDir, 'output.hex');
+  execSync(`unzip -p "${zipPath}" output.hex > "${hexPath}"`);
+
   const manifestPath = path.join(artifactsDir, 'manifest.json');
   const manifest = {
-    request_id: requestId,
+    artifact_id: artifactId,
     created_at: new Date().toISOString(),
     input_file: args.inputFile,
     stats: result.body.stats,
     missing_keys: result.body.missing_keys
   };
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
-  
+
   console.log(`完整流程成功:`);
-  console.log(`  - request_id: ${requestId}`);
+  console.log(`  - artifact_id: ${artifactId}`);
   console.log(`  - 补全图标: ${result.body.stats?.enrich?.icons || 0}`);
   console.log(`  - 补全组件: ${result.body.stats?.enrich?.components || 0}`);
   console.log(`  - 总图层数: ${result.body.stats?.layers?.total || 0}`);

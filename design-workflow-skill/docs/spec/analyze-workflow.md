@@ -7,7 +7,7 @@
 
 | 步骤 | 执行者 | 核心工作 |
 |------|--------|----------|
-| Step 1 — 渲染 + 节点提取 | **Chrome DevTools MCP + 纯脚本** | 浏览器渲染、截图、DOM 遍历提取节点树，全程无 LLM |
+| Step 1 — 渲染 + 节点提取 | **Chrome DevTools MCP + 纯脚本** | 浏览器渲染、DOM 遍历提取节点树，全程无 LLM |
 | Step 2 — 语义标注 | **纯脚本**（剪枝/精简/线框）<br>**LLM**（语义标注） | 脚本做预处理和后处理；LLM 只负责给每个节点打 semantic/label/confidence |
 | Step 3 — 完整流程 | **脚本** | 调用 `/pipeline` 接口，一次性完成补全 + 转 DSL + 导出 hex（仅需一次 HTTP 请求） |
 
@@ -15,7 +15,7 @@
 
 ```
 <PROJECT_DIR>-output/
-├── step1/  screenshots/ + nodes-*.json + styles-*.json + manifest.json + run.json
+├── step1/  nodes-*.json + styles-*.json + manifest.json + run.json
 ├── step2/  nodes-*.json + styles-*.json + schema-*.json + wireframe-*.html + manifest.json + run.json
 └── step3/  pipeline-result-*.json + output-*.hex + output-*.zip
 ```
@@ -29,13 +29,10 @@
 
 **创建产物目录：**
 ```bash
-mkdir -p "<PROJECT_DIR>-output/step1/screenshots"
+mkdir -p "<PROJECT_DIR>-output/step1"
 ```
 
 **对每个 HTML 文件依次执行：**
-
-> **顺序说明：先提取节点，再展开截图。**  
-> 节点提取必须在任何 DOM 修改之前完成，以确保坐标反映页面真实渲染状态。截图在展开之后拍摄，仅作为视觉参考，不影响节点坐标。
 
 1. **[Chrome DevTools MCP]** `resize_page` → 1440×900
 2. **[Chrome DevTools MCP]** `navigate_page` → `file://<PROJECT_DIR>/<filename>.html`
@@ -54,19 +51,15 @@ mkdir -p "<PROJECT_DIR>-output/step1/screenshots"
      { styles: result.styles }   // ✅ 正确
      result.styles               // ❌ 错误，prune-nodes.js 会报 Cannot read properties of undefined
      ```
-6. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 调用 `expandForScreenshot()`  
-   *(页面内执行的纯脚本：将 overflow:auto/scroll 容器改为 visible，使滚动内容撑开，仅用于截图，无 LLM 参与)*
-7. **[Chrome DevTools MCP]** `take_screenshot` → `fullPage: true`，保存至 `step1/screenshots/<filename>.png`
-8. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 调用 `expandForExtract()`  
-   *(页面内执行的纯脚本：截图完成后，解除所有 overflow 约束并将容器高度撑开，使 extractNodes 能采集到 overflow:hidden/auto/scroll 内被裁剪的子节点坐标，无 LLM 参与)*  
-   > **此步骤在截图之后**，不影响截图坐标；其目的是让后续步骤的节点坐标覆盖全部内容（包括折叠/滚动区域）
-9. **[Chrome DevTools MCP]** `resize_page` → 恢复 1440×900
-10. **[Chrome DevTools MCP]** `list_network_requests` → 收集本地资源（scripts / styles / images / fonts）
-11. **[Chrome DevTools MCP]** `close_page` → 关闭当前页面，释放浏览器资源
-12. **[纯脚本]** 写入 `step1/manifest.json`（页面元数据 + 资源引用）和 `step1/run.json`（执行日志）
-13. **[纯脚本]** 清理执行过程中产生的所有临时文件（`/tmp/raw-*.json` 等），不得残留在项目根目录或其他位置
+6. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 调用 `expandForExtract()`  
+   *(页面内执行的纯脚本：解除所有 overflow 约束并将容器高度撑开，使 extractNodes 能采集到 overflow:hidden/auto/scroll 内被裁剪的子节点坐标，无 LLM 参与)*
+7. **[Chrome DevTools MCP]** `resize_page` → 恢复 1440×900
+8. **[Chrome DevTools MCP]** `list_network_requests` → 收集本地资源（scripts / styles / images / fonts）
+9. **[Chrome DevTools MCP]** `close_page` → 关闭当前页面，释放浏览器资源
+10. **[纯脚本]** 写入 `step1/manifest.json`（页面元数据 + 资源引用）和 `step1/run.json`（执行日志）
+11. **[纯脚本]** 清理执行过程中产生的所有临时文件（`/tmp/raw-*.json` 等），不得残留在项目根目录或其他位置
 
-**Step 1 验收：** manifest 存在 + pages[] 长度等于 HTML 文件数 + 每页均有 nodes/styles/截图 → 才可进入 Step 2。
+**Step 1 验收：** manifest 存在 + pages[] 长度等于 HTML 文件数 + 每页均有 nodes/styles → 才可进入 Step 2。
 
 ---
 
@@ -110,9 +103,7 @@ mkdir -p "<PROJECT_DIR>-output/step2"
    ```bash
    node SCRIPTS/gen-wireframe.js \
      "<PROJECT_DIR>-output/step2/nodes-<filename>.json" \
-     "<PROJECT_DIR>-output/step1/screenshots/<filename>.png" \
-     "<PROJECT_DIR>-output/step2/wireframe-<filename>.html" \
-     --dpr 2
+     "<PROJECT_DIR>-output/step2/wireframe-<filename>.html"
    ```
    按 semantic 类型生成色块线框 HTML
 
@@ -138,7 +129,7 @@ mkdir -p "<PROJECT_DIR>-output/step2"
 
 | 服务 | 端口 | 接口 | 输入 | 输出 |
 |---|---|---|---|---|
-| Unified DSL Pipeline | 3104 | `POST /pipeline` | node-dsl JSON 文件 | hex + zip（补全 + 转 DSL + 导出一次性完成） |
+| Unified DSL Pipeline | 3204 | `POST /pipeline` | node-dsl JSON 文件 | zip（补全 + 转 DSL + 导出一次性完成，hex 在 zip 内） |
 
 **创建产物目录：**
 ```bash
@@ -152,18 +143,19 @@ mkdir -p "<PROJECT_DIR>-output/step3"
 ```bash
 # 调用 Unified DSL Pipeline 的 pipeline 接口
 # 上传 node-dsl JSON，一次性完成：补全 + 转 design-dsl + 导出 hex
-curl -s -X POST http://localhost:3104/pipeline \
+curl -s -X POST http://localhost:3204/pipeline \
   -F "file=@<PROJECT_DIR>-output/step2/schema-<filename>.json" \
   -F "page_name=<filename>" \
   -F "skip_enrich=false" \
   -o "<PROJECT_DIR>-output/step3/pipeline-result-<filename>.json"
 
-# 解析响应，提取 hex 和 zip
+# 解析响应，提取 zip（hex 在 zip 内的 output.hex）
 node -e "
 const r = JSON.parse(require('fs').readFileSync('<PROJECT_DIR>-output/step3/pipeline-result-<filename>.json'));
 if (r.success) {
-  require('fs').writeFileSync('<PROJECT_DIR>-output/step3/output-<filename>.hex', r.hex, 'utf8');
-  require('fs').writeFileSync('<PROJECT_DIR>-output/step3/output-<filename>.b64', r.zip, 'utf8');
+  const zipBuffer = Buffer.from(r.zip, 'base64');
+  require('fs').writeFileSync('<PROJECT_DIR>-output/step3/output-<filename>.zip', zipBuffer);
+  console.log('artifact_id:', r.artifact_id);
   console.log('补全图标:', r.stats.enrich.icons);
   console.log('补全组件:', r.stats.enrich.components);
   console.log('总图层数:', r.stats.layers.total);
@@ -176,11 +168,10 @@ if (r.success) {
 }
 "
 
-# base64 解码为 zip（含 output.hex 及 svg/png 资源，但 hex 已在上一步提取）
-base64 -d "<PROJECT_DIR>-output/step3/output-<filename>.b64" > "<PROJECT_DIR>-output/step3/output-<filename>.zip"
-rm "<PROJECT_DIR>-output/step3/output-<filename>.b64"
+# 从 zip 中提取 hex 文件
+unzip -p "<PROJECT_DIR>-output/step3/output-<filename>.zip" output.hex > "<PROJECT_DIR>-output/step3/output-<filename>.hex"
 
-# 解压 zip（验证内容，optional）
+# 查看 zip 内容（optional）
 unzip -l "<PROJECT_DIR>-output/step3/output-<filename>.zip"
 ```
 
@@ -189,23 +180,21 @@ unzip -l "<PROJECT_DIR>-output/step3/output-<filename>.zip"
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `success` | boolean | 是否成功 |
-| `request_id` | string | 请求唯一标识（可在服务端查看产物） |
-| `artifacts_dir` | string | 服务端产物存储路径 |
+| `artifact_id` | string | 本次产物唯一标识，产物同时存储于服务端 `artifacts/` 目录 |
 | `stats.enrich.icons` | number | 补全的图标数 |
 | `stats.enrich.components` | number | 补全的组件数 |
 | `stats.layers.total` | number | 总图层数 |
 | `stats.layers.frames/texts/instances/placeholders` | number | 各类型图层统计 |
 | `stats.missing_keys` | number | 缺失的组件数量 |
-| `hex` | string | Pixso hex 文件内容（文本格式） |
-| `zip` | string | zip 包（base64 编码） |
+| `zip` | string | zip 包（base64 编码），解压后含 `output.hex` 及 svg/png 资源 |
 | `missing_keys` | array | 缺失组件的 key 列表 |
 
 **产物说明：**
 
 | 文件 | 说明 |
 |---|---|
-| `output-<filename>.hex` | 最终产物，可直接导入 Pixso |
-| `output-<filename>.zip` | zip 包（含 hex + placeholder 资源） |
+| `output-<filename>.hex` | 最终产物，可直接导入 Pixso（从 zip 中提取） |
+| `output-<filename>.zip` | zip 包（含 output.hex + placeholder 资源） |
 | `{guid}.svg` | icon placeholder 的 SVG 内容（zip 内） |
 | `{guid}.png` | image placeholder 的图片内容（zip 内） |
 

@@ -141,7 +141,7 @@
 ## Step C — 完整流程（补全 + 生成 Hex）
 
 > **执行者：脚本**  
-> 以 Step B 生成的 `<slug>-node.json` 为输入，调用 Unified DSL Pipeline API 的 `/pipeline` 接口（端口 3104），**一次性完成**补全节点信息（iconSvg + component）+ 转 design-dsl + 导出 hex，仅需一次 HTTP 请求。
+> 以 Step B 生成的 `<slug>-node.json` 为输入，调用 Unified DSL Pipeline API 的 `/pipeline` 接口（端口 3204），**一次性完成**补全节点信息（iconSvg + component）+ 转 design-dsl + 导出 hex，仅需一次 HTTP 请求。
 
 **服务信息：**
 
