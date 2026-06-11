@@ -169,7 +169,7 @@ if (r.success) {
 }
 "
 
-# 解压 zip，解压出什么就是什么（output.hex + svg/png 资源等）
+# 解压 zip，解压出什么就是什么
 unzip -o "<PROJECT_DIR>-output/step3/output-<filename>.zip" -d "<PROJECT_DIR>-output/step3/"
 ```
 

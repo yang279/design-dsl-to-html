@@ -182,7 +182,7 @@ if (r.success) {
 }
 "
 
-# 解压 zip，解压出什么就是什么（output.hex + svg/png 资源等）
+# 解压 zip，解压出什么就是什么
 ARTIFACT_ID=$(node -e "const r=JSON.parse(require('fs').readFileSync('<slug>-output/pipeline-result.json')); console.log(r.artifact_id)")
 unzip -o "<slug>-output/${ARTIFACT_ID}/output.zip" -d "<slug>-output/${ARTIFACT_ID}/"
 ```
