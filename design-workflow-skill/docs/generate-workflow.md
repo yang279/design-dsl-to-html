@@ -16,8 +16,12 @@
 <slug>-output/
 ├── <slug>-node.json        ← Node DSL JSON（Step B）
 ├── pipeline-result.json    ← 完整流程响应（Step C）
-├── <slug>-output.hex       ← 最终产物（Step C，可直接导入 Pixso）
-└── <slug>-output.zip       ← zip 包（含 hex + placeholder 资源）
+└── <artifact_id>/          ← 产物目录（Step C，artifact_id 由接口返回）
+    ├── output.zip          ← zip 包（含 hex + placeholder 资源）
+    ├── output.hex          ← 解压产物，可直接导入 Pixso
+    ├── {guid}.svg          ← icon placeholder（解压产物）
+    ├── {guid}.png          ← image placeholder（解压产物）
+    └── manifest.json       ← 本次请求的元信息
 ```
 
 `<slug>` 取自页面名称的短 slug（如 `login`、`settings`）。
@@ -157,12 +161,15 @@ curl -s -X POST http://localhost:3204/pipeline \
   -F "skip_enrich=false" \
   -o "<slug>-output/pipeline-result.json"
 
-# 解析响应，提取 hex 和 zip
+# 解析响应，提取 zip 并解压（解压出什么就是什么）
 node -e "
 const r = JSON.parse(require('fs').readFileSync('<slug>-output/pipeline-result.json'));
 if (r.success) {
-  require('fs').writeFileSync('<slug>-output/<slug>-output.hex', r.hex, 'utf8');
-  require('fs').writeFileSync('<slug>-output/<slug>-output.b64', r.zip, 'utf8');
+  const dir = '<slug>-output/' + r.artifact_id;
+  require('fs').mkdirSync(dir, { recursive: true });
+  const zipBuf = Buffer.from(r.zip, 'base64');
+  require('fs').writeFileSync(dir + '/output.zip', zipBuf);
+  console.log('artifact_id:', r.artifact_id);
   console.log('补全图标:', r.stats.enrich.icons);
   console.log('补全组件:', r.stats.enrich.components);
   console.log('总图层数:', r.stats.layers.total);
@@ -175,12 +182,9 @@ if (r.success) {
 }
 "
 
-# base64 解码为 zip（含 output.hex 及 svg/png 资源，但 hex 已在上一步提取）
-base64 -d "<slug>-output/<slug>-output.b64" > "<slug>-output/<slug>-output.zip"
-rm "<slug>-output/<slug>-output.b64"
-
-# 解压 zip（验证内容，optional）
-unzip -l "<slug>-output/<slug>-output.zip"
+# 解压 zip，解压出什么就是什么（output.hex + svg/png 资源等）
+ARTIFACT_ID=$(node -e "const r=JSON.parse(require('fs').readFileSync('<slug>-output/pipeline-result.json')); console.log(r.artifact_id)")
+unzip -o "<slug>-output/${ARTIFACT_ID}/output.zip" -d "<slug>-output/${ARTIFACT_ID}/"
 ```
 
 **响应字段说明：**
@@ -202,10 +206,11 @@ unzip -l "<slug>-output/<slug>-output.zip"
 
 | 文件 | 说明 |
 |---|---|
-| `<slug>-output.hex` | 最终产物，可直接导入 Pixso |
-| `<slug>-output.zip` | zip 包（含 hex + placeholder 资源） |
-| `{guid}.svg` | icon placeholder 的 SVG 内容（zip 内） |
-| `{guid}.png` | image placeholder 的图片内容（zip 内） |
+| `<artifact_id>/output.zip` | zip 包（含 hex + placeholder 资源） |
+| `<artifact_id>/output.hex` | 解压产物，可直接导入 Pixso |
+| `<artifact_id>/{guid}.svg` | icon placeholder 的 SVG 内容（解压产物） |
+| `<artifact_id>/{guid}.png` | image placeholder 的图片内容（解压产物） |
+| `<artifact_id>/manifest.json` | 本次请求的元信息（artifact_id、stats、missing_keys） |
 
 > **调试说明：** `pipeline-result.json` 保存完整响应，包含所有统计信息和产物数据。
 
@@ -215,4 +220,4 @@ unzip -l "<slug>-output/<slug>-output.zip"
 - `missing_keys` 非空 → 记录警告，hex/zip 仍有效
 - 补全失败（icons/components = 0）但接口返回成功 → hex/zip 仍生成，无补全数据
 
-**Step C 验收：** `<slug>-output.hex` 存在（可直接导入 Pixso）。
+**Step C 验收：** `<artifact_id>/output.hex` 存在（解压产物，可直接导入 Pixso）。

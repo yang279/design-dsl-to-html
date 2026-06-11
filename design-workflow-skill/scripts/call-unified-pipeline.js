@@ -229,10 +229,8 @@ async function callPipeline(args) {
   const zipPath = path.join(artifactsDir, 'output.zip');
   fs.writeFileSync(zipPath, zipBuffer);
 
-  // hex 在 zip 内的 output.hex，用 unzip 提取
   const { execSync } = require('child_process');
-  const hexPath = path.join(artifactsDir, 'output.hex');
-  execSync(`unzip -p "${zipPath}" output.hex > "${hexPath}"`);
+  execSync(`unzip -o "${zipPath}" -d "${artifactsDir}"`);
 
   const manifestPath = path.join(artifactsDir, 'manifest.json');
   const manifest = {
@@ -253,7 +251,6 @@ async function callPipeline(args) {
     console.warn(`  - 缺失组件: ${result.body.missing_keys.join(', ')}`);
   }
   console.log(`  - 产物目录: ${artifactsDir}`);
-  console.log(`  - hex 文件: ${hexPath}`);
   console.log(`  - zip 文件: ${zipPath}`);
 }
 

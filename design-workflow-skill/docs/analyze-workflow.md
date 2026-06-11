@@ -17,7 +17,7 @@
 <PROJECT_DIR>-output/
 ├── step1/  nodes-*.json + styles-*.json + manifest.json + run.json
 ├── step2/  nodes-*.json + styles-*.json + schema-*.json + wireframe-*.html + manifest.json + run.json
-└── step3/  pipeline-result-*.json + output-*.hex + output-*.zip
+└── step3/  pipeline-result-*.json + output-*.zip + output.hex + {guid}.svg/png（解压产物）
 ```
 
 ---
@@ -169,11 +169,8 @@ if (r.success) {
 }
 "
 
-# 从 zip 中提取 hex 文件
-unzip -p "<PROJECT_DIR>-output/step3/output-<filename>.zip" output.hex > "<PROJECT_DIR>-output/step3/output-<filename>.hex"
-
-# 查看 zip 内容（optional）
-unzip -l "<PROJECT_DIR>-output/step3/output-<filename>.zip"
+# 解压 zip，解压出什么就是什么（output.hex + svg/png 资源等）
+unzip -o "<PROJECT_DIR>-output/step3/output-<filename>.zip" -d "<PROJECT_DIR>-output/step3/"
 ```
 
 **响应字段说明：**
@@ -194,10 +191,10 @@ unzip -l "<PROJECT_DIR>-output/step3/output-<filename>.zip"
 
 | 文件 | 说明 |
 |---|---|
-| `output-<filename>.hex` | 最终产物，可直接导入 Pixso（从 zip 中提取） |
 | `output-<filename>.zip` | zip 包（含 output.hex + placeholder 资源） |
-| `{guid}.svg` | icon placeholder 的 SVG 内容（zip 内） |
-| `{guid}.png` | image placeholder 的图片内容（zip 内） |
+| `output.hex` | 解压产物，可直接导入 Pixso |
+| `{guid}.svg` | icon placeholder 的 SVG 内容（解压产物） |
+| `{guid}.png` | image placeholder 的图片内容（解压产物） |
 
 > **调试说明：** `pipeline-result-<filename>.json` 保存完整响应，包含所有统计信息和产物数据。
 
@@ -207,4 +204,4 @@ unzip -l "<PROJECT_DIR>-output/step3/output-<filename>.zip"
 - `missing_keys` 非空 → 记录警告，hex/zip 仍有效，对应 instance 节点在 Pixso 中缺失但不影响导入
 - 补全失败（icons/components = 0）但接口返回成功 → hex/zip 仍生成，无补全数据
 
-**Step 3 验收：** 每个页面均有 `output-<filename>.hex`（可直接导入 Pixso）。
+**Step 3 验收：** 每个页面均有 `output.hex`（解压产物，可直接导入 Pixso）。
