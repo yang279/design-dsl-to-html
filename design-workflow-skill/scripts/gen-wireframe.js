@@ -20,56 +20,18 @@
 const fs   = require('fs');
 const path = require('path');
 
-// ─── Semantic → border color mapping ────────────────────────────────────────
+// ─── LayerType → border color mapping ───────────────────────────────────────
 const COLORS = {
-  page:        '#3A6EA5',
-  navbar:      '#4A90D9',
-  'tab-bar':   '#6C8EBF',
-  'tab-item':  '#9DB8D9',
-  'nav-item':  '#7BAFD4',
-  breadcrumb:  '#A0C0DC',
-  section:     '#5B9A6E',
-  container:   '#8DB8A0',
-  row:         '#A8CC9F',
-  column:      '#C2DEB8',
-  card:        '#E8A838',
-  header:      '#D4A030',
-  footer:      '#B88828',
-  sidebar:     '#669999',
-  overlay:     '#996699',
-  heading:     '#D4624A',
-  'body-text': '#C87D6A',
-  label:       '#B09070',
-  caption:     '#C0A898',
-  badge:       '#CC8844',
-  status:      '#AAA830',
-  button:      '#D4503C',
-  link:        '#4A8FD4',
-  input:       '#6C9ABA',
-  select:      '#7AACCA',
-  checkbox:    '#8CC8A0',
-  search:      '#5AACBA',
-  image:       '#8C6BAE',
-  icon:        '#9E7CC0',
-  avatar:      '#B08CC0',
-  logo:        '#7B5EA0',
-  chart:       '#5A8FA0',
-  table:       '#6A9090',
-  'table-head':'#5A8080',
-  'table-row': '#7AAAAA',
-  'table-cell':'#8ABBBB',
-  list:        '#7AB87A',
-  'list-item': '#A0CC9A',
-  pagination:  '#AAAACC',
-  stat:        '#CCA860',
-  divider:     '#AAAAAA',
-  spacer:      '#CCCCCC',
-  background:  '#BBBBBB',
-  '-':         '#888888',
+  frame:     '#4A90D9',
+  text:      '#D4624A',
+  image:     '#8C6BAE',
+  icon:      '#9E7CC0',
+  component: '#E8A838',
+  '-':       '#888888',
 };
 
-function colorFor(semantic) {
-  return COLORS[semantic] || '#888888';
+function colorFor(layerType) {
+  return COLORS[layerType] || '#888888';
 }
 
 // ─── Read PNG dimensions from file header (IHDR chunk) ──────────────────────
@@ -108,16 +70,16 @@ function generateWireframe(nodesData, screenshotRelPath, screenshotCssW, screens
   const boxes = nodes.map(n => {
     const { x, y, w, h } = n.rect;
     if (w < 2 || h < 2) return '';
-    const color    = colorFor(n.semantic);
-    const sem      = n.semantic || '-';
-    const conf     = n.confidence === 'low' ? ' ⚠' : '';
-    const labelTxt = n.label && n.label !== '-' ? n.label : (n.text ? n.text.slice(0, 14) : '');
+    const color    = colorFor(n.layerType);
+    const lt       = n.layerType || '-';
+    const conf     = n.layerConfidence === 'low' ? ' ⚠' : '';
+    const labelTxt = n.layerName && n.layerName !== '-' ? n.layerName : (n.text ? n.text.slice(0, 14) : '');
     const passCSS  = n.passthrough ? 'opacity:0.3;' : '';
     const fz       = Math.max(9, Math.min(12, Math.floor(h * 0.35)));
-    return `<div class="node" data-nid="${n.nid}" data-sem="${sem}" data-conf="${n.confidence || ''}" ` +
+    return `<div class="node" data-nid="${n.nid}" data-sem="${lt}" data-conf="${n.layerConfidence || ''}" ` +
       `style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-color:${color};${passCSS}" ` +
-      `title="nid:${n.nid} | ${sem} | ${labelTxt}">` +
-      `<span class="tag" style="background:${color};font-size:${fz}px">${sem}${conf}</span>` +
+      `title="nid:${n.nid} | ${lt} | ${labelTxt}">` +
+      `<span class="tag" style="background:${color};font-size:${fz}px">${lt}${conf}</span>` +
       (labelTxt ? `<span class="lbl" style="font-size:${fz}px">${labelTxt}</span>` : '') +
       `</div>`;
   }).join('\n');
@@ -128,7 +90,7 @@ function generateWireframe(nodesData, screenshotRelPath, screenshotCssW, screens
   ).join('');
 
   // ── Low-confidence count ───────────────────────────────────────────────────
-  const lowCount = nodes.filter(n => n.confidence === 'low').length;
+  const lowCount = nodes.filter(n => n.layerConfidence === 'low').length;
 
   const html = `<!DOCTYPE html>
 <html lang="zh">
@@ -273,11 +235,11 @@ ${boxes}
       const lbl = el.title.split(' | ')[2] || '';
       it.innerHTML =
         '<tr><td>nid</td><td>' + el.dataset.nid + '</td></tr>' +
-        '<tr><td>semantic</td><td><b style="color:#e94560">' + el.dataset.sem + '</b></td></tr>' +
-        '<tr><td>confidence</td><td>' + (el.dataset.conf || '-') + '</td></tr>' +
+        '<tr><td>layerType</td><td><b style="color:#e94560">' + el.dataset.sem + '</b></td></tr>' +
+        '<tr><td>layerConfidence</td><td>' + (el.dataset.conf || '-') + '</td></tr>' +
         '<tr><td>rect</td><td>' + parseInt(s.left) + ',' + parseInt(s.top) +
           ' &nbsp;' + parseInt(s.width) + '×' + parseInt(s.height) + '</td></tr>' +
-        '<tr><td>label</td><td>' + lbl + '</td></tr>';
+        '<tr><td>layerName</td><td>' + lbl + '</td></tr>';
       info.classList.add('vis');
     });
   });

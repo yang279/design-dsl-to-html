@@ -146,10 +146,9 @@ function pruneTree(tree, styles) {
     if (!paintable && !hasKids) return null;
 
     const out = {
-      nid:   node.nid,
-      tag:   node.tag,
-      depth: node.depth,
-      rect:  node.rect
+      nid:  node.nid,
+      tag:  node.tag,
+      rect: node.rect
     };
 
     if (node.id)    out.id    = node.id;

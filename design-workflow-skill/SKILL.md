@@ -31,7 +31,7 @@ docs/
 >
 > **正确做法：** 若调用接口时服务未启动（连接拒绝 / 超时），按各流程的**降级规则**处理（跳过对应注入步骤，继续后续流程），并在最终输出中说明哪个服务不可用。
 >
-> 涉及的服务端口：Unified DSL Pipeline `3104`（推荐）、Chrome DevTools MCP（由外部管理）。旧版服务端口（iconAgent `3103`、Component Match `3102`、dsl-to-hex `3101`）已弃用。
+> 涉及的服务端口：Unified DSL Pipeline `3204`（推荐）、Chrome DevTools MCP（由外部管理）。旧版服务端口（iconAgent `3103`、Component Match `3102`、dsl-to-hex `3101`）已弃用。
 
 ---
 

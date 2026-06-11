@@ -91,11 +91,12 @@ mkdir -p "<PROJECT_DIR>-output/step2"
      按顶层子节点拆分为多个块，每块 ≤ 150 节点；对每个块**分别**执行第 4 步语义标注；  
      所有块标注完成后合并回完整树，再执行第 5 步写文件
 
-4. **[LLM]** 语义标注：为精简树（或当前块）中每个节点追加三个字段  
-   - `semantic`（必填）：节点的语义类型，如 `button` / `input` / `navbar` / `text` / `container` 等  
-   - `label`（必填）：结合节点的 `text`、`class`、`attrs`、父节点语义、页面上下文综合判断后的可读描述，要具体到业务含义，不能只写类型名。如同一页面有多个按钮应分别描述为 "登录按钮" / "注册按钮" / "忘记密码链接"，而非统一写 "按钮"。**当 `semantic` 为 `icon` 时，还须在描述中注明图标的尺寸（宽×高，单位 px）和线条粗细（细线/中等/粗），如 "返回图标 24×24 细线" / "搜索图标 20×20 中等"**  
-   - `confidence`（必填）：`"high"` 或 `"low"`  
-   ⛔ 三个字段均缺一不可；分块时每块单独标注，全部完成后才能合并写文件
+4. **[LLM]** 语义标注：为精简树（或当前块）中每个节点追加以下字段，字段含义见 [node-dsl.md](node-dsl.md)  
+   - `layerType`（必填）：图层类型，从 `frame` / `text` / `image` / `icon` / `component` 中选一  
+   - `layerName`（必填）：节点语义的简短名称，如 `"登录按钮"` / `"用户头像"`；同页面同类节点必须可区分  
+   - `layerDescription`（必填）：节点的详细业务描述，说明该节点具体做了什么事情；**`layerType` 为 `icon` 时还须注明尺寸和线条粗细，如 `"返回图标 24×24 细线"`**  
+   - `layerConfidence`（可选）：仅标注把握不足时添加，值固定为 `"low"`；省略即表示 high  
+   ⛔ 前三个字段缺一不可；分块时每块单独标注，全部完成后才能合并写文件
 5. 写入 `step2/nodes-<filename>.json`
 6. **[纯脚本]** 调用 `simplifyStyles(prunedTree, styles)` → 写入 `step2/styles-<filename>.json`  
    按固定规则去掉浏览器默认值，只保留对设计有意义的字段
@@ -108,7 +109,7 @@ mkdir -p "<PROJECT_DIR>-output/step2"
    按 semantic 类型生成色块线框 HTML
 
 8. **[LLM]** 生成 `step2/schema-<filename>.json`：将 nodes 树与 styles 映射合并为统一 schema 格式，结构定义见 [node-dsl.md](node-dsl.md)  
-   合并规则：遍历 nodes 树中每个节点，将 `styles-<filename>.json` 中对应 nid 的样式对象以 `style` 字段内联进节点，递归处理 `children`，保留 nodes 文件中所有原有字段（`semantic`、`label`、`confidence`、`passthrough` 等）  
+   合并规则：遍历 nodes 树中每个节点，将 `styles-<filename>.json` 中对应 nid 的样式对象以 `style` 字段内联进节点，递归处理 `children`，保留 nodes 文件中所有原有字段（`layerType`、`layerName`、`layerDescription`、`layerConfidence`、`passthrough` 等）  
    若某节点在 styles 中无对应条目（样式全为默认值），则 `style` 字段设为 `{}`
 
 **所有页面完成后：**
@@ -116,14 +117,14 @@ mkdir -p "<PROJECT_DIR>-output/step2"
 9. 写入 `step2/manifest.json`（`step: 2`，每页加 `wireframe` 和 `schema` 字段）
 10. 写入 `step2/run.json`
 
-**Step 2 验收：** 每个页面的 nodes/styles/wireframe/schema 均存在 + 所有节点有 `semantic` 字段 + run.json 存在。
+**Step 2 验收：** 每个页面的 nodes/styles/wireframe/schema 均存在 + 所有节点有 `layerType` / `layerName` / `layerDescription` 字段 + run.json 存在。
 
 ---
 
 ## Step 3 — 完整流程（补全 + 生成 Hex）
 
 > **执行者：脚本**  
-> 以 Step 2 生成的 `schema-<filename>.json` 为输入，调用 Unified DSL Pipeline API 的 `/pipeline` 接口（端口 3104），**一次性完成**补全节点信息（iconSvg + component）+ 转 design-dsl + 导出 hex，仅需一次 HTTP 请求。
+> 以 Step 2 生成的 `schema-<filename>.json` 为输入，调用 Unified DSL Pipeline API 的 `/pipeline` 接口（端口 3204），**一次性完成**补全节点信息（iconSvg + component）+ 转 design-dsl + 导出 hex，仅需一次 HTTP 请求。
 
 **服务信息：**
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * call-unified-pipeline.js — 调用 Unified DSL Pipeline API（端口 3104）
+ * call-unified-pipeline.js — 调用 Unified DSL Pipeline API（端口 3204）
  *
  * 用法:
  *   node call-unified-pipeline.js enrich <input-node.json> <output-final.json>

@@ -55,24 +55,19 @@
 - 桌面端：1440 × 900
 
 **层次结构规则：**
-- 顶层：一个根容器节点（语义 `container`，覆盖整个画布）
+- 顶层：一个根容器节点（`layerType: frame`，覆盖整个画布）
 - 区块：每个功能区（导航栏、Hero 区、表单区、列表区等）是独立子节点
-- 内容元素：文字节点用 `text` / `heading`，形状装饰用 `container`，组件库元素用对应语义类型
+- 内容元素：文字节点用 `layerType: text`，图片用 `image`，图标用 `icon`，可复用组件用 `component`，其余布局节点用 `frame`
 
-**以下元素须使用对应组件语义类型：**
+**以下元素须使用对应 `layerType`：**
 
-| 元素 | semantic |
+| 元素 | layerType |
 |---|---|
-| 按钮 | `button` |
-| 输入框 / 文本域 | `input` |
-| 图标 | `icon` |
-| 顶部导航栏 | `navbar` |
-| 底部标签栏 | `tabbar` |
-| 开关 | `switch` |
-| 复选框 / 单选框 | `container` |
-| 徽标 / 标签 | `badge` |
-| 头像 | `avatar` |
-| 卡片 | `card` |
+| 按钮、输入框、开关、头像、徽标等可复用组件 | `component` |
+| 图标（SVG / 字体图标 / 小尺寸图片）| `icon` |
+| 图片展示区 | `image` |
+| 纯文字节点 | `text` |
+| 布局容器（导航栏、卡片、列表等） | `frame` |
 
 ---
 
@@ -83,11 +78,11 @@
 
 **nid 规则（固定规则）：** 全树自增整数，从 `1` 开始，按深度优先顺序递增，每个节点唯一。
 
-**depth 规则（固定规则）：** 根节点 `depth` 为 `2`，每嵌套一层 +1。
-
 **rect 规则（固定规则）：** 所有节点使用页面绝对坐标（累加所有祖先偏移），单位 px，字段为 `x`/`y`/`w`/`h`。
 
-**label 规则：** 结合页面上下文描述具体业务含义，同类节点须可区分（如"登录按钮"/"注册按钮"）。`semantic` 为 `icon` 时须注明尺寸和线条粗细（如 `"返回图标 24×24 细线"`）。
+**layerName 规则：** 节点语义的简短名称，同类节点须可区分（如"登录按钮"/"注册按钮"）。
+
+**layerDescription 规则：** 节点的详细业务描述，说明该节点具体做了什么。`layerType` 为 `icon` 时须注明尺寸和线条粗细（如 `"返回图标 24×24 细线"`）。
 
 **style 规则：** 只写非默认值字段，值为 CSS 字符串格式。常用字段：
 
@@ -147,7 +142,7 @@
 
 | 服务 | 端口 | 接口 | 输入 | 输出 |
 |---|---|---|---|---|
-| Unified DSL Pipeline | 3204 | `POST /pipeline` | node-dsl JSON 文件 | zip（补全 + 转 DSL + 导出一次性完成，hex 在 zip 内） |
+| Unified DSL Pipeline | 3204 | `POST /pipeline` | node-dsl JSON 文件 | hex + zip（补全 + 转 DSL + 导出一次性完成） |
 
 **调用步骤：**
 
@@ -162,13 +157,12 @@ curl -s -X POST http://localhost:3204/pipeline \
   -F "skip_enrich=false" \
   -o "<slug>-output/pipeline-result.json"
 
-# 解析响应，提取 zip（hex 在 zip 内的 output.hex）
+# 解析响应，提取 hex 和 zip
 node -e "
 const r = JSON.parse(require('fs').readFileSync('<slug>-output/pipeline-result.json'));
 if (r.success) {
-  const zipBuffer = Buffer.from(r.zip, 'base64');
-  require('fs').writeFileSync('<slug>-output/<slug>-output.zip', zipBuffer);
-  console.log('artifact_id:', r.artifact_id);
+  require('fs').writeFileSync('<slug>-output/<slug>-output.hex', r.hex, 'utf8');
+  require('fs').writeFileSync('<slug>-output/<slug>-output.b64', r.zip, 'utf8');
   console.log('补全图标:', r.stats.enrich.icons);
   console.log('补全组件:', r.stats.enrich.components);
   console.log('总图层数:', r.stats.layers.total);
@@ -181,10 +175,11 @@ if (r.success) {
 }
 "
 
-# 从 zip 中提取 hex 文件
-unzip -p "<slug>-output/<slug>-output.zip" output.hex > "<slug>-output/<slug>-output.hex"
+# base64 解码为 zip（含 output.hex 及 svg/png 资源，但 hex 已在上一步提取）
+base64 -d "<slug>-output/<slug>-output.b64" > "<slug>-output/<slug>-output.zip"
+rm "<slug>-output/<slug>-output.b64"
 
-# 查看 zip 内容（optional）
+# 解压 zip（验证内容，optional）
 unzip -l "<slug>-output/<slug>-output.zip"
 ```
 
@@ -193,21 +188,22 @@ unzip -l "<slug>-output/<slug>-output.zip"
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `success` | boolean | 是否成功 |
-| `artifact_id` | string | 本次产物唯一标识，产物同时存储于服务端 `artifacts/` 目录 |
+| `request_id` | string | 请求唯一标识 |
 | `stats.enrich.icons` | number | 补全的图标数 |
 | `stats.enrich.components` | number | 补全的组件数 |
 | `stats.layers.total` | number | 总图层数 |
 | `stats.layers.frames/texts/instances/placeholders` | number | 各类型图层统计 |
 | `stats.missing_keys` | number | 缺失的组件数量 |
-| `zip` | string | zip 包（base64 编码），解压后含 `output.hex` 及 svg/png 资源 |
+| `hex` | string | Pixso hex 文件内容（文本格式） |
+| `zip` | string | zip 包（base64 编码） |
 | `missing_keys` | array | 缺失组件的 key 列表 |
 
 **产物说明：**
 
 | 文件 | 说明 |
 |---|---|
-| `<slug>-output.hex` | 最终产物，可直接导入 Pixso（从 zip 中提取） |
-| `<slug>-output.zip` | zip 包（含 output.hex + placeholder 资源） |
+| `<slug>-output.hex` | 最终产物，可直接导入 Pixso |
+| `<slug>-output.zip` | zip 包（含 hex + placeholder 资源） |
 | `{guid}.svg` | icon placeholder 的 SVG 内容（zip 内） |
 | `{guid}.png` | image placeholder 的图片内容（zip 内） |
 

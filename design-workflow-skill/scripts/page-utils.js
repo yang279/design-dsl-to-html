@@ -200,7 +200,7 @@ function extractNodes() {
     styles[String(nid)] = s;
 
     // 构建节点
-    const node = { nid: nid, tag: tag, depth: depth, rect: { x: x, y: y, w: w, h: h } };
+    const node = { nid: nid, tag: tag, rect: { x: x, y: y, w: w, h: h } };
     if (isFixed) node.rect.fixed = true;
     if (el.id) node.id = el.id;
     if (el.className && typeof el.className === 'string' && el.className.trim())
