@@ -15,17 +15,10 @@ description: >
 
 ```
 docs/
-├── spec/                         ← 流程规范 + DSL 结构定义
-│   ├── analyze-workflow.md       分析流程（Step 1–3）
-│   ├── generate-workflow.md      生成流程（Step A–C）
-│   ├── design-guidelines.md      设计规范参考（必读）
-│   ├── node-dsl.md               语义节点 Schema 规范
-│   └── design-dsl.md             设计 DSL（Pixso 图层格式）规范
-└── api/                          ← 外部服务接口文档
-    ├── unified-dsl-pipeline-API.md  Unified DSL Pipeline（端口 3104，推荐）
-    ├── icon-api.md               iconAgent（端口 3103，旧版）
-    ├── component-api.md          Component Match（端口 3102，旧版）
-    └── dsl2hex-api.md            dsl-to-hex（端口 3101，旧版）
+├── analyze-workflow.md     分析流程（Step 1–3）
+├── generate-workflow.md    生成流程（Step A–C）
+├── design-guidelines.md    设计规范参考（必读）
+└── node-dsl.md             语义节点 Schema 规范
 ```
 
 ---
@@ -51,8 +44,6 @@ docs/
 > - ✅ **服务端自动存储产物**：每次请求的产物自动保存至服务端 `artifacts/` 目录，可通过 `artifact_id` 标识
 
 **响应说明：** `/pipeline` 接口返回 `artifact_id` + `zip`（base64），hex 文件包含在 zip 包内（`output.hex`），不再作为独立字段返回。
-
-详见：[unified-dsl-pipeline-API.md](docs/api/unified-dsl-pipeline-API.md)
 
 ---
 
@@ -82,7 +73,6 @@ SCRIPTS = SKILL_DIR/scripts
 | `page-utils.js` | 页面展开（`expandForScreenshot`）、图片检测（`checkImagesLoaded`）、节点提取（`extractNodes`） | ⚠️ **浏览器脚本**，必须通过 `evaluate_script` 读文件内容后在页面内执行 |
 | `prune-nodes.js` | 节点剪枝 + 样式精简 | ⚠️ **Node.js 脚本**，必须通过 `node SCRIPTS/prune-nodes.js` 在 Bash 中执行，不能用 evaluate_script |
 | `gen-wireframe.js` | 语义线框 HTML 生成 | ⚠️ **Node.js CLI 脚本**，必须通过 `node SCRIPTS/gen-wireframe.js` 在 Bash 中执行，不能用 evaluate_script |
-| `schema-to-design-dsl.js` | node-dsl → design-dsl（旧流程，已被 `/pipeline` 接口替代） | **Node.js 脚本**，`node SCRIPTS/schema-to-design-dsl.js`（仅在需要单独转换时使用） |
 | `call-unified-pipeline.js` | 调用 Unified DSL Pipeline API（端口 3204）：<br>• **pipeline**（推荐）：补全 + 转 DSL + 导出，一次请求<br>• enrich：仅补全节点信息<br>• convert：仅转 DSL → hex | **Node.js 脚本**，推荐：<br>`node SCRIPTS/call-unified-pipeline.js pipeline <input.json> <output-dir>` |
 | `launch-pixso.js` | 启动/连接 Chrome 并打开 Pixso 设计页 | **Node.js 脚本**，`node SCRIPTS/launch-pixso.js [--login]`，需在后台常驻 |
 | `import-to-pixso.js` | 将 hex 粘贴到 Pixso 画布 | **Node.js 脚本**，`node SCRIPTS/import-to-pixso.js <hex-file>` |
@@ -96,7 +86,7 @@ SCRIPTS = SKILL_DIR/scripts
 
 | 用户意图关键词 | 路由 |
 |---|---|
-| 写一个 / 做一个 / 生成 / 创建 / 设计 / 帮我画 | → 生成流程，见 [generate-workflow.md](docs/spec/generate-workflow.md) |
-| 分析 / 解析 / 检查 / 解读 / 提取 / inspect | → 分析流程，见 [analyze-workflow.md](docs/spec/analyze-workflow.md) |
+| 写一个 / 做一个 / 生成 / 创建 / 设计 / 帮我画 | → 生成流程，见 [generate-workflow.md](docs/generate-workflow.md) |
+| 分析 / 解析 / 检查 / 解读 / 提取 / inspect | → 分析流程，见 [analyze-workflow.md](docs/analyze-workflow.md) |
 
 若意图模糊，默认进入生成流程。

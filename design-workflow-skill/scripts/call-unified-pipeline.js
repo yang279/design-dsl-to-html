@@ -19,7 +19,7 @@ const path = require('path');
 const http = require('http');
 
 const PIPELINE_PORT = 3204;
-const PIPELINE_HOST = '7.192.166.139';
+const PIPELINE_HOST = 'localhost';
 
 function parseArgs(argv) {
   const args = {
