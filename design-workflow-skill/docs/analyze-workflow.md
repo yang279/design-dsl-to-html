@@ -48,6 +48,13 @@ mkdir -p "<PROJECT_DIR>-output/step1"
    - `tree`：节点树，每个节点字段按 node-dsl.md Node 定义（含 nid/tag/rect/text/src/alt/naturalWidth/naturalHeight/loaded/href/type/passthrough/children 等）  
    - `styles`：以 nid 字符串为键，值为原始 computedStyle 对象（含 `imageData`/`svgContent`）；**不做任何精简，全量保留**
 
+5. **[纯脚本]** Bash 调用 `resolve-bg-images.js`，将 styles 中 `backgroundImage` 的 `file://` 本地静态资源解析为 `imageData`/`svgContent`（浏览器端因安全限制无法读取本地二进制文件，由 Node.js 补全）：
+   ```bash
+   node SCRIPTS/resolve-bg-images.js \
+     "<PROJECT_DIR>-output/step1/<filename>.json"
+   ```
+   原地修改 step1 JSON，无新增产物。
+
 **Step 1 验收：** 每页的 `step1/<filename>.json` 存在，`tree` 非空，`styles` 的键数等于树的节点总数 → 才可进入 Step 2。
 
 ---

@@ -47,6 +47,39 @@ function _imgToBase64(imgEl) {
 }
 
 /**
+ * 将静态资源 URL 转为 base64 Data URL（同步 XHR 二进制读取）
+ * - 已是 data URL 时直接返回
+ * - 使用 charset=x-user-defined 绕过 sync XHR 不能设 responseType 的限制
+ */
+function _urlToBase64(src) {
+  if (!src) return null;
+  if (src.startsWith('data:')) return src;
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', src, false);
+    xhr.overrideMimeType('text/plain; charset=x-user-defined');
+    xhr.send();
+    if (xhr.status !== 0 && xhr.status !== 200) return null;
+    const raw = xhr.responseText;
+    let binary = '';
+    for (let i = 0; i < raw.length; i++) binary += String.fromCharCode(raw.charCodeAt(i) & 0xff);
+    const ext = src.split('?')[0].toLowerCase().split('.').pop();
+    const mime = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', webp:'image/webp' }[ext] || 'image/png';
+    return 'data:' + mime + ';base64,' + btoa(binary);
+  } catch (e) { return null; }
+}
+
+/**
+ * 从 CSS background-image 值中提取第一个 url() 的 src
+ * 忽略 linear-gradient / radial-gradient 等纯 CSS 值
+ */
+function _bgImageSrc(bgImage) {
+  if (!bgImage || bgImage === 'none') return null;
+  const m = bgImage.match(/url\("?([^")\s]+)"?\)/);
+  return m ? m[1] : null;
+}
+
+/**
  * 提取完整 DOM 节点树 + computedStyle 映射
  * 返回 { tree: Node | Node[], styles: { [nid]: object } }
  * - tree: 以 body 直接子节点为根（html/body 已剥掉），单子节点时为对象，多子节点时为数组
@@ -146,6 +179,20 @@ function extractNodes() {
       }
     } else if (tag === 'svg') {
       s.svgContent = el.outerHTML;
+    }
+
+    // CSS background-image 静态资源采集（img/svg 未命中时才检查）
+    if (!s.imageData && !s.svgContent) {
+      const bgSrc = _bgImageSrc(s.backgroundImage);
+      if (bgSrc) {
+        if (_isSvgSrc(bgSrc)) {
+          const xml = _getSvgContent(bgSrc);
+          if (xml) s.svgContent = xml;
+        } else {
+          const b64 = _urlToBase64(bgSrc);
+          if (b64) s.imageData = b64;
+        }
+      }
     }
 
     // 构建节点
