@@ -70,12 +70,10 @@ SCRIPTS = SKILL_DIR/scripts
 
 | 脚本文件 | 用途 | 调用方式 |
 |----------|------|----------|
-| `page-utils.js` | 页面展开（`expandForScreenshot`）、图片检测（`checkImagesLoaded`）、节点提取（`extractNodes`） | ⚠️ **浏览器脚本**，必须通过 `evaluate_script` 读文件内容后在页面内执行 |
+| `page-utils.js` | DOM 节点树提取（`extractNodes`）+ 图片数据采集（imageData/svgContent） | ⚠️ **浏览器脚本**，必须通过 `evaluate_script` 读文件内容后在页面内执行 |
 | `prune-nodes.js` | 节点剪枝 + 样式精简 | ⚠️ **Node.js 脚本**，必须通过 `node SCRIPTS/prune-nodes.js` 在 Bash 中执行，不能用 evaluate_script |
-| `gen-wireframe.js` | 语义线框 HTML 生成 | ⚠️ **Node.js CLI 脚本**，必须通过 `node SCRIPTS/gen-wireframe.js` 在 Bash 中执行，不能用 evaluate_script |
-| `call-unified-pipeline.js` | 调用 Unified DSL Pipeline API（端口 3204）：<br>• **pipeline**（推荐）：补全 + 转 DSL + 导出，一次请求<br>• enrich：仅补全节点信息<br>• convert：仅转 DSL → hex | **Node.js 脚本**，推荐：<br>`node SCRIPTS/call-unified-pipeline.js pipeline <input.json> <output-dir>` |
-| `launch-pixso.js` | 启动/连接 Chrome 并打开 Pixso 设计页 | **Node.js 脚本**，`node SCRIPTS/launch-pixso.js [--login]`，需在后台常驻 |
-| `import-to-pixso.js` | 将 hex 粘贴到 Pixso 画布 | **Node.js 脚本**，`node SCRIPTS/import-to-pixso.js <hex-file>` |
+| `build-schema.js` | LLM 标注结果 + prune 产物 → node-dsl schema（内部自动 simplifyStyle + 内联 style） | **Node.js CLI 脚本**，`node SCRIPTS/build-schema.js <annotated.json> <pruned.json> <output.json>` |
+| `call-unified-pipeline.js` | 调用 Unified DSL Pipeline API（端口 3204）：补全 + 转 DSL + 导出，一次请求 | **Node.js 脚本**，`node SCRIPTS/call-unified-pipeline.js pipeline <input.json> <output-dir>` |
 
 ---
 

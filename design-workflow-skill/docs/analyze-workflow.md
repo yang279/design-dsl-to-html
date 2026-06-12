@@ -15,17 +15,17 @@
 
 ```
 <PROJECT_DIR>-output/
-├── step1/  nodes-*.json + styles-*.json + manifest.json + run.json
-├── step2/  nodes-*.json + styles-*.json + schema-*.json + wireframe-*.html + manifest.json + run.json
+├── step1/  <filename>.json（节点树 + 原始样式 + 图片数据，合并为单文件）
+├── step2/  schema-*.json
 └── step3/  pipeline-result-*.json + output-*.zip + 解压产物
 ```
 
 ---
 
-## Step 1 — 渲染基准 + 全节点提取
+## Step 1 — 加载页面 + 提取节点数据
 
-> **执行者：Chrome DevTools MCP 工具 + 纯脚本（page-utils.js、extractNodes），无 LLM**  
-> 通过浏览器真实渲染页面，执行 JS 脚本提取完整 DOM 树和 computedStyle。所有操作都是确定性的工具调用，不涉及语义理解。
+> **执行者：Chrome DevTools MCP + 纯脚本（page-utils.js），无 LLM**  
+> 用浏览器真实渲染页面，提取所有 DOM 节点的原始样式和图片数据。**不对 DOM 做任何修改**，所有字段定义以 [node-dsl.md](node-dsl.md) 为准。
 
 **创建产物目录：**
 ```bash
@@ -34,32 +34,21 @@ mkdir -p "<PROJECT_DIR>-output/step1"
 
 **对每个 HTML 文件依次执行：**
 
-1. **[Chrome DevTools MCP]** `resize_page` → 1440×900
-2. **[Chrome DevTools MCP]** `navigate_page` → `file://<PROJECT_DIR>/<filename>.html`
-3. **[Chrome DevTools MCP]** `wait_for` → 等待主体元素可见
-4. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 调用 `checkImagesLoaded()`  
-   *(页面内执行的纯脚本：检查所有 img 是否加载完成，确保坐标稳定，无 LLM 参与)*  
-   若 `allLoaded` 为 `false`，等待 500ms 后最多重试 10 次；超时则继续，不中断流程
-5. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 读取 `SCRIPTS/page-utils.js`，调用 `extractNodes()`  
-   *(页面内执行的纯脚本：DOM 未经任何修改，直接遍历采集节点树 + computedStyle，坐标与页面真实渲染一致，无 LLM 参与)*  
-    
-   结果**以任意方式**写入以下两个产物文件（临时文件中转或直接写出均可），**格式要求不得违反**：
-   - `step1/nodes-<filename>.json`：写 `extractNodes()` 返回值的 `tree` 字段，直接存储
-   - `step1/styles-<filename>.json`：**必须包含 `styles` 包装层**，格式为 `{ "styles": { nid: computedStyle } }`  
-     ⚠️ `extractNodes()` 返回的 `styles` 是平铺对象 `{ nid: ... }`，保存时必须手动添加包装：  
-     ```js
-     { styles: result.styles }   // ✅ 正确
-     result.styles               // ❌ 错误，prune-nodes.js 会报 Cannot read properties of undefined
-     ```
-6. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 调用 `expandForExtract()`  
-   *(页面内执行的纯脚本：解除所有 overflow 约束并将容器高度撑开，使 extractNodes 能采集到 overflow:hidden/auto/scroll 内被裁剪的子节点坐标，无 LLM 参与)*
-7. **[Chrome DevTools MCP]** `resize_page` → 恢复 1440×900
-8. **[Chrome DevTools MCP]** `list_network_requests` → 收集本地资源（scripts / styles / images / fonts）
-9. **[Chrome DevTools MCP]** `close_page` → 关闭当前页面，释放浏览器资源
-10. **[纯脚本]** 写入 `step1/manifest.json`（页面元数据 + 资源引用）和 `step1/run.json`（执行日志）
-11. **[纯脚本]** 清理执行过程中产生的所有临时文件（`/tmp/raw-*.json` 等），不得残留在项目根目录或其他位置
+1. **[Chrome DevTools MCP]** `resize_page` → 1440×900，`navigate_page` → `file://<PROJECT_DIR>/<filename>.html`
 
-**Step 1 验收：** manifest 存在 + pages[] 长度等于 HTML 文件数 + 每页均有 nodes/styles → 才可进入 Step 2。
+2. **[Chrome DevTools MCP + 纯脚本]** `evaluate_script` → 读取 `SCRIPTS/page-utils.js`，调用 `extractNodes()`  
+   采集完整 DOM 节点树（字段定义见 node-dsl.md 的 Node 结构）及每个节点的全量原始 computedStyle；  
+   对 `img` 标签和内联 `<svg>` 同步采集图片数据（`imageData` / `svgContent`），写入 styles 对象对应 nid 条目。  
+   **不对 DOM 做任何修改，只读取节点信息。**
+
+3. **[Chrome DevTools MCP]** `close_page` → 关闭页面（若为最后一个 tab 无法关闭则跳过）
+
+4. **[纯脚本]** 将 `extractNodes()` 返回值直接写入：  
+   `step1/<filename>.json` — 合并格式 `{ "tree": <节点树>, "styles": { "[nid]": <rawStyle> } }`  
+   - `tree`：节点树，每个节点字段按 node-dsl.md Node 定义（含 nid/tag/rect/text/src/alt/naturalWidth/naturalHeight/loaded/href/type/passthrough/children 等）  
+   - `styles`：以 nid 字符串为键，值为原始 computedStyle 对象（含 `imageData`/`svgContent`）；**不做任何精简，全量保留**
+
+**Step 1 验收：** 每页的 `step1/<filename>.json` 存在，`tree` 非空，`styles` 的键数等于树的节点总数 → 才可进入 Step 2。
 
 ---
 
@@ -76,48 +65,34 @@ mkdir -p "<PROJECT_DIR>-output/step2"
 
 **对每个页面依次执行：**
 
-1. 读取 `step1/nodes-<filename>.json` + `step1/styles-<filename>.json`
-2. **[纯脚本]** Bash 调用 `prune-nodes.js`（Node.js 进程脚本，不能用 evaluate_script）：
+1. **[纯脚本]** Bash 调用 `prune-nodes.js`，剪掉不可见节点：
    ```bash
    node SCRIPTS/prune-nodes.js \
-     "<PROJECT_DIR>-output/step1/nodes-<filename>.json" \
-     "<PROJECT_DIR>-output/step1/styles-<filename>.json" \
+     "<PROJECT_DIR>-output/step1/<filename>.json" \
      > /tmp/pruned-<filename>.json
    ```
-   基于 CSS `display:none` / `visibility:hidden` / `opacity:0` 等规则剪枝，输出 `{ tree, styles }` 到 stdout
-3. **[纯脚本]** 统计剪枝后节点总数：
-   - **≤ 150 节点**：整棵树作为一个块，直接进行第 4 步
-   - **> 150 节点**：⛔ **必须分块，不得跳过此步骤**  
-     按顶层子节点拆分为多个块，每块 ≤ 150 节点；对每个块**分别**执行第 4 步语义标注；  
-     所有块标注完成后合并回完整树，再执行第 5 步写文件
+   基于 `display:none` / `visibility:hidden` / `opacity:0` 剪枝，输出 `{ tree, styles }` 到 stdout
 
-4. **[LLM]** 语义标注：为精简树（或当前块）中每个节点追加以下字段，字段含义见 [node-dsl.md](node-dsl.md)  
-   - `layerType`（必填）：图层类型，从 `frame` / `text` / `image` / `icon` / `component` 中选一  
-   - `layerName`（必填）：节点语义的简短名称，如 `"登录按钮"` / `"用户头像"`；同页面同类节点必须可区分  
-   - `layerDescription`（必填）：节点的详细业务描述，说明该节点具体做了什么事情；**`layerType` 为 `icon` 时还须注明尺寸和线条粗细，如 `"返回图标 24×24 细线"`**  
-   - `layerConfidence`（可选）：仅标注把握不足时添加，值固定为 `"low"`；省略即表示 high  
-   ⛔ 前三个字段缺一不可；分块时每块单独标注，全部完成后才能合并写文件
-5. 写入 `step2/nodes-<filename>.json`
-6. **[纯脚本]** 调用 `simplifyStyles(prunedTree, styles)` → 写入 `step2/styles-<filename>.json`  
-   按固定规则去掉浏览器默认值，只保留对设计有意义的字段
-7. **[纯脚本]** Bash 调用 `gen-wireframe.js`（Node.js CLI 脚本，不能用 evaluate_script）：
+2. **[LLM]** 语义标注：统计剪枝后节点数，为每个节点追加以下字段（字段含义见 [node-dsl.md](node-dsl.md)）：
+   - `layerType`（必填）：`frame` / `text` / `image` / `icon` / `component` 选一
+   - `layerName`（必填）：节点语义的简短名称，同页面同类节点必须可区分
+   - `layerDescription`（必填）：节点的详细业务描述；`icon` 须注明尺寸和线条粗细
+   - `layerConfidence`（可选）：把握不足时填 `"low"`，省略即为 high  
+   ⛔ 节点数 > 150 时**必须分块**：按顶层子节点拆分，每块 ≤ 150 节点，逐块标注完成后合并  
+   ⛔ 标注完成后将结果写入 `/tmp/annotated-<filename>.json`，格式 `{ "tree": <标注后节点树> }`
+
+3. **[纯脚本]** Bash 调用 `build-schema.js`，合并标注结果与精简样式，输出最终 schema：
    ```bash
-   node SCRIPTS/gen-wireframe.js \
-     "<PROJECT_DIR>-output/step2/nodes-<filename>.json" \
-     "<PROJECT_DIR>-output/step2/wireframe-<filename>.html"
+   node SCRIPTS/build-schema.js \
+     /tmp/annotated-<filename>.json \
+     /tmp/pruned-<filename>.json \
+     "<PROJECT_DIR>-output/step2/schema-<filename>.json"
    ```
-   按 semantic 类型生成色块线框 HTML
+   内部自动对每个节点的样式调用 `simplifyStyle` 精简后内联；`text`/`icon`/`component` 节点剥除 `children`
 
-8. **[LLM]** 生成 `step2/schema-<filename>.json`：将 nodes 树与 styles 映射合并为统一 schema 格式，结构定义见 [node-dsl.md](node-dsl.md)  
-   合并规则：遍历 nodes 树中每个节点，将 `styles-<filename>.json` 中对应 nid 的样式对象以 `style` 字段内联进节点，递归处理 `children`，保留 nodes 文件中所有原有字段（`layerType`、`layerName`、`layerDescription`、`layerConfidence`、`passthrough` 等）  
-   若某节点在 styles 中无对应条目（样式全为默认值），则 `style` 字段设为 `{}`
+4. **[纯脚本]** 清理临时文件：`rm /tmp/pruned-<filename>.json /tmp/annotated-<filename>.json`
 
-**所有页面完成后：**
-
-9. 写入 `step2/manifest.json`（`step: 2`，每页加 `wireframe` 和 `schema` 字段）
-10. 写入 `step2/run.json`
-
-**Step 2 验收：** 每个页面的 nodes/styles/wireframe/schema 均存在 + 所有节点有 `layerType` / `layerName` / `layerDescription` 字段 + run.json 存在。
+**Step 2 验收：** 每页的 `schema-<filename>.json` 存在 + 所有节点有 `layerType` / `layerName` / `layerDescription` 字段。
 
 ---
 

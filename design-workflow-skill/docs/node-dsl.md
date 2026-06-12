@@ -121,6 +121,16 @@ Node | Node[]
 | `maskSize` / `maskPosition` | string | 有 `maskImage` 时才出现 |
 | `backdropFilter` | string | 非 `"none"` |
 
+**图片内容**
+
+| 字段 | 类型 | 出现条件 |
+|---|---|---|
+| `imageData` | string | `img` 标签（非 SVG）且已成功加载时，内容编码为 base64 Data URL，格式 `data:image/png;base64,...` |
+| `svgContent` | string | `img[src=*.svg]` 或 `data:image/svg+xml` 加载成功时，值为原始 SVG XML 字符串；内联 `<svg>` 标签时，值为该元素的 `outerHTML` |
+
+> 两个字段均由 Step 1 的 `extractNodes()` 写入 styles 映射，经 `prune-nodes.js` 透传至 Step 2 的 `styles-<filename>.json`，最终内联到 schema 的每个节点的 `style` 字段中。  
+> 跨域图片受 canvas 污染限制，`imageData` 可能为空；SVG 跨域时同步 XHR 会失败，`svgContent` 亦可能为空。
+
 ---
 
 ## LayerType

@@ -92,6 +92,10 @@ function simplifyStyle(s) {
   }
   if (s.backdropFilter) o.backdropFilter = s.backdropFilter;
 
+  // 图片内容（非 CSS 字段，透传）
+  if (s.imageData)  o.imageData  = s.imageData;
+  if (s.svgContent) o.svgContent = s.svgContent;
+
   return o;
 }
 
@@ -213,19 +217,19 @@ if (typeof module !== 'undefined') {
 }
 
 // ─── CLI 入口 ─────────────────────────────────────────────────────────────────
-// node prune-nodes.js <nodes-file.json> <styles-file.json>
+// node prune-nodes.js <combined.json>
+// combined.json 格式：{ tree, styles }  （Step 1 的合并产物）
 // → stdout: { tree, styles }
 
 if (typeof require !== 'undefined' && require.main === module) {
   const fs = require('fs');
-  const [,, nodesPath, stylesPath] = process.argv;
-  if (!nodesPath || !stylesPath) {
-    console.error('Usage: node prune-nodes.js <nodes.json> <styles.json>');
+  const [,, combinedPath] = process.argv;
+  if (!combinedPath) {
+    console.error('Usage: node prune-nodes.js <combined.json>');
     process.exit(1);
   }
-  const nodesFile  = JSON.parse(fs.readFileSync(nodesPath,  'utf8'));
-  const stylesFile = JSON.parse(fs.readFileSync(stylesPath, 'utf8'));
-  const tree   = pruneTree(nodesFile.tree, stylesFile.styles);
-  const styles = simplifyStyles(tree, stylesFile.styles);
+  const combined = JSON.parse(fs.readFileSync(combinedPath, 'utf8'));
+  const tree   = pruneTree(combined.tree, combined.styles);
+  const styles = simplifyStyles(tree, combined.styles);
   console.log(JSON.stringify({ tree, styles }, null, 2));
 }

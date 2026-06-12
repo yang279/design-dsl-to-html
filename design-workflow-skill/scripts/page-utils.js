@@ -1,119 +1,56 @@
 /**
- * 获取页面完整渲染尺寸（宽+高），兼容 position:absolute 溢出父框的情况
- * 用途：Step 1 扩展视口前获取真实页面宽高，确保截图不被截断
- * 返回：{ pageWidth, pageHeight }
- * 调用方式：evaluate_script → function getPageFullSize() { ... }
+ * 判断 src 是否指向 SVG（含 data:image/svg+xml 和 .svg 后缀 URL）
  */
-function getPageFullSize() {
-  // scrollHeight/scrollWidth 不统计 position:absolute 溢出元素，需遍历所有节点取最大值
-  let maxBottom = Math.max(
-    document.body.scrollHeight,
-    document.body.offsetHeight,
-    document.documentElement.scrollHeight,
-    document.documentElement.offsetHeight
-  );
-  let maxRight = Math.max(
-    document.body.scrollWidth,
-    document.body.offsetWidth,
-    document.documentElement.scrollWidth,
-    document.documentElement.offsetWidth
-  );
-  document.querySelectorAll('*').forEach(el => {
-    const r = el.getBoundingClientRect();
-    const b = r.top  + window.scrollY + r.height;
-    const e = r.left + window.scrollX + r.width;
-    if (b > maxBottom) maxBottom = b;
-    if (e > maxRight)  maxRight  = e;
-  });
-  return { pageWidth: Math.ceil(maxRight), pageHeight: Math.ceil(maxBottom) };
+function _isSvgSrc(src) {
+  if (!src) return false;
+  if (src.startsWith('data:image/svg')) return true;
+  return src.split('?')[0].toLowerCase().endsWith('.svg');
 }
 
 /**
- * 【截图专用】将所有 overflow:auto/scroll 容器改为 visible，让内容撑开文档高度
- * 保留 overflow:hidden（视觉裁剪效果不变）
- * 截图方式：take_screenshot fullPage:true（视口高度受屏幕限制，不能依赖 resize_page + fullPage:false）
- * 返回展开后 { scrollW, scrollH }
+ * 获取 SVG 内容字符串
+ * - data URL：直接解码
+ * - file/http URL：同步 XHR 读取原始 XML
  */
-function expandForScreenshot() {
-  // 释放 html/body 的 height:100% 约束，让内容高度决定文档高度
-  document.documentElement.style.height = 'auto';
-  document.documentElement.style.minHeight = '0';
-  document.body.style.height = 'auto';
-  document.body.style.minHeight = '0';
-
-  // 对每个 overflow:auto/scroll 容器：改为 visible，并把 height 改为 auto
-  // 同时向下传播一级：直接子元素若是 height:100%，也改为 auto
-  document.querySelectorAll('*').forEach(el => {
-    const cs = window.getComputedStyle(el);
-    const isScrollX = cs.overflowX === 'auto' || cs.overflowX === 'scroll';
-    const isScrollY = cs.overflowY === 'auto' || cs.overflowY === 'scroll';
-    if (!isScrollX && !isScrollY) return;
-
-    if (isScrollX) el.style.overflowX = 'visible';
-    if (isScrollY) el.style.overflowY = 'visible';
-    el.style.height = 'auto';
-    el.style.minHeight = '0';
-
-    for (const child of el.children) {
-      const ccs = window.getComputedStyle(child);
-      if (ccs.height.endsWith('%')) {
-        child.style.height = 'auto';
-        child.style.minHeight = '0';
-      }
-    }
-  });
-
-  return { scrollW: document.documentElement.scrollWidth, scrollH: document.documentElement.scrollHeight };
+function _getSvgContent(src) {
+  if (!src) return null;
+  if (src.startsWith('data:image/svg')) {
+    const comma = src.indexOf(',');
+    if (comma === -1) return null;
+    const isBase64 = src.substring(0, comma).includes('base64');
+    const data = src.substring(comma + 1);
+    try { return isBase64 ? atob(data) : decodeURIComponent(data); } catch (e) { return null; }
+  }
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', src, false);
+    xhr.send();
+    return (xhr.status === 0 || xhr.status === 200) ? xhr.responseText.trim() : null;
+  } catch (e) { return null; }
 }
 
 /**
- * 【节点提取专用】展开所有溢出容器，使节点坐标覆盖全部隐藏内容
- * 用途：在截图完成后调用，解除所有 overflow 约束，使 extractNodes 能采集到
- *       overflow:hidden/auto/scroll 容器内被裁剪的子节点坐标和样式
- * 返回：展开后真实 { totalWidth, totalHeight }
- * 调用方式：evaluate_script → function expandForExtract() { ... }
+ * 将 <img> 元素内容转为 base64 Data URL
+ * - 已是 data URL 时直接返回
+ * - 否则通过 canvas drawImage 编码为 PNG base64
  */
-function expandForExtract() {
-  document.querySelectorAll('*').forEach(el => {
-    const hasV = el.scrollHeight > el.clientHeight + 2;
-    const hasH = el.scrollWidth  > el.clientWidth  + 2;
-    if (!hasV && !hasH) return;
-    el.style.overflow = 'visible';
-    if (hasV) el.style.minHeight = el.scrollHeight + 'px';
-    if (hasH) el.style.minWidth  = el.scrollWidth  + 'px';
-  });
-  let maxRight = 0, maxBottom = 0;
-  document.querySelectorAll('*').forEach(el => {
-    const r = el.getBoundingClientRect();
-    if (r.left + r.width  > maxRight)  maxRight  = r.left + r.width;
-    if (r.top  + r.height > maxBottom) maxBottom = r.top  + r.height;
-  });
-  maxRight = Math.ceil(maxRight); maxBottom = Math.ceil(maxBottom);
-  document.documentElement.style.minHeight = maxBottom + 'px';
-  document.documentElement.style.minWidth  = maxRight  + 'px';
-  document.body.style.minHeight = maxBottom + 'px';
-  document.body.style.minWidth  = maxRight  + 'px';
-  return { totalWidth: document.documentElement.scrollWidth, totalHeight: document.documentElement.scrollHeight };
-}
-
-/**
- * 检查页面内所有 <img> 是否已加载完成
- * 用途：Step 1 扩展视口触发懒加载后，等待图片就绪再截图
- * 返回：{ total, loaded, allLoaded }
- * 调用方式：evaluate_script → function checkImagesLoaded() { ... }
- */
-function checkImagesLoaded() {
-  const imgs  = [...document.querySelectorAll('img')];
-  const total  = imgs.length;
-  const loaded = imgs.filter(img => img.complete && img.naturalWidth > 0).length;
-  return { total, loaded, allLoaded: total === 0 || loaded === total };
+function _imgToBase64(imgEl) {
+  if (imgEl.src && imgEl.src.startsWith('data:')) return imgEl.src;
+  try {
+    const w = imgEl.naturalWidth  || imgEl.offsetWidth  || 1;
+    const h = imgEl.naturalHeight || imgEl.offsetHeight || 1;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(imgEl, 0, 0);
+    return c.toDataURL();
+  } catch (e) { return null; } // 跨域图片 canvas 污染时返回 null
 }
 
 /**
  * 提取完整 DOM 节点树 + computedStyle 映射
  * 返回 { tree: Node | Node[], styles: { [nid]: object } }
  * - tree: 以 body 直接子节点为根（html/body 已剥掉），单子节点时为对象，多子节点时为数组
- * - styles: nid（字符串键）→ 全量 computedStyle 字段对象（由 prune-nodes.js 精简）
+ * - styles: nid（字符串键）→ 全量 computedStyle 字段对象 + imageData/svgContent
  * 调用方式：evaluate_script → 读文件内容后整体执行，再调用 extractNodes()
  */
 function extractNodes() {
@@ -179,7 +116,6 @@ function extractNodes() {
     if (!tag || SKIP_TAGS.has(tag)) return null;
 
     const cs = window.getComputedStyle(el);
-    // 跳过 display:none（不可见且不占空间）
     if (cs.display === 'none') return null;
 
     const bcr = el.getBoundingClientRect();
@@ -198,6 +134,19 @@ function extractNodes() {
       if (v !== undefined && v !== '') s[p] = v;
     });
     styles[String(nid)] = s;
+
+    // 图片内容内嵌：img 标签转 base64 / SVG XML；内联 <svg> 取 outerHTML
+    if (tag === 'img' && el.complete && el.naturalWidth > 0) {
+      if (_isSvgSrc(el.src)) {
+        const xml = _getSvgContent(el.src);
+        if (xml) s.svgContent = xml;
+      } else {
+        const b64 = _imgToBase64(el);
+        if (b64) s.imageData = b64;
+      }
+    } else if (tag === 'svg') {
+      s.svgContent = el.outerHTML;
+    }
 
     // 构建节点
     const node = { nid: nid, tag: tag, rect: { x: x, y: y, w: w, h: h } };
