@@ -17,11 +17,8 @@
 ├── <slug>-node.json        ← Node DSL JSON（Step B）
 ├── pipeline-result.json    ← 完整流程响应（Step C）
 └── <artifact_id>/          ← 产物目录（Step C，artifact_id 由接口返回）
-    ├── output.zip          ← zip 包（含 hex + placeholder 资源）
-    ├── output.hex          ← 解压产物，可直接导入 Pixso
-    ├── {guid}.svg          ← icon placeholder（解压产物）
-    ├── {guid}.png          ← image placeholder（解压产物）
-    └── manifest.json       ← 本次请求的元信息
+    ├── output.zip          ← zip 包
+    └── 解压产物             ← 解压后的文件
 ```
 
 `<slug>` 取自页面名称的短 slug（如 `login`、`settings`）。
@@ -182,7 +179,7 @@ if (r.success) {
 }
 "
 
-# 解压 zip，解压出什么就是什么
+# 解压 zip
 ARTIFACT_ID=$(node -e "const r=JSON.parse(require('fs').readFileSync('<slug>-output/pipeline-result.json')); console.log(r.artifact_id)")
 unzip -o "<slug>-output/${ARTIFACT_ID}/output.zip" -d "<slug>-output/${ARTIFACT_ID}/"
 ```
@@ -202,16 +199,6 @@ unzip -o "<slug>-output/${ARTIFACT_ID}/output.zip" -d "<slug>-output/${ARTIFACT_
 | `zip` | string | zip 包（base64 编码） |
 | `missing_keys` | array | 缺失组件的 key 列表 |
 
-**产物说明：**
-
-| 文件 | 说明 |
-|---|---|
-| `<artifact_id>/output.zip` | zip 包（含 hex + placeholder 资源） |
-| `<artifact_id>/output.hex` | 解压产物，可直接导入 Pixso |
-| `<artifact_id>/{guid}.svg` | icon placeholder 的 SVG 内容（解压产物） |
-| `<artifact_id>/{guid}.png` | image placeholder 的图片内容（解压产物） |
-| `<artifact_id>/manifest.json` | 本次请求的元信息（artifact_id、stats、missing_keys） |
-
 > **调试说明：** `pipeline-result.json` 保存完整响应，包含所有统计信息和产物数据。
 
 **降级规则：**
@@ -220,4 +207,4 @@ unzip -o "<slug>-output/${ARTIFACT_ID}/output.zip" -d "<slug>-output/${ARTIFACT_
 - `missing_keys` 非空 → 记录警告，hex/zip 仍有效
 - 补全失败（icons/components = 0）但接口返回成功 → hex/zip 仍生成，无补全数据
 
-**Step C 验收：** `<artifact_id>/output.hex` 存在（解压产物，可直接导入 Pixso）。
+**Step C 验收：** zip 文件已解压至 `<artifact_id>/` 目录。
